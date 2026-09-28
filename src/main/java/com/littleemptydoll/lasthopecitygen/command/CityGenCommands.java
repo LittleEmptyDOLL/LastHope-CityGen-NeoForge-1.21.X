@@ -5,12 +5,14 @@ import com.littleemptydoll.lasthopecitygen.structure.catalog.StructureCatalog;
 import com.littleemptydoll.lasthopecitygen.structure.definition.StructureDefinition;
 import com.littleemptydoll.lasthopecitygen.structure.definition.StructureType;
 import com.littleemptydoll.lasthopecitygen.structure.placement.StructurePlacement;
+import com.littleemptydoll.lasthopecitygen.worldgen.CityPlan;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Rotation;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
@@ -33,6 +35,8 @@ public final class CityGenCommands {
                                     );
                                     return count;
                                 }))
+                        .then(Commands.literal("locate")
+                                .executes(context -> locate(context.getSource())))
                         .then(Commands.literal("place")
                                 .then(Commands.argument("id", StringArgumentType.greedyString())
                                         .executes(context -> place(
@@ -40,6 +44,24 @@ public final class CityGenCommands {
                                                 StringArgumentType.getString(context, "id")
                                         ))))
         );
+    }
+
+    private static int locate(CommandSourceStack source) {
+        if (!source.getLevel().dimension().equals(Level.OVERWORLD)) {
+            source.sendFailure(Component.literal("Cities are planned only in the Overworld"));
+            return 0;
+        }
+        BlockPos position = BlockPos.containing(source.getPosition());
+        Optional<CityPlan.CityCenter> found = CityPlan.nearestCity(source.getLevel().getSeed(),
+                position.getX(), position.getZ());
+        if (found.isEmpty()) {
+            source.sendFailure(Component.literal("No planned city found nearby"));
+            return 0;
+        }
+        CityPlan.CityCenter city = found.get();
+        source.sendSuccess(() -> Component.literal("Nearest planned city center: X="
+                + city.blockX() + ", Z=" + city.blockZ() + " (generates in new chunks)"), false);
+        return 1;
     }
 
     private static int place(CommandSourceStack source, String rawId) {

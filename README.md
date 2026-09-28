@@ -28,7 +28,7 @@ Put structure-block NBT files in `data/<namespace>/structure/<path>.nbt` (for in
 
 `dimensions` must match the NBT size. `footprint` describes its occupied area within those dimensions. Current automatic placement accepts buildings no larger than 12 × 12 blocks, including after rotation. `front` is the entrance-facing direction in the unrotated template. `weight` controls selection within a category. The catalog retains `size` and `tags` for future plot rules. Only the `single` type is implemented; `composite` and `jigsaw` are reserved. Definitions can be added or overridden by datapacks and reload with `/reload`.
 
-An operator can check loaded definitions with `/citygen list` and place a specific one at their position with `/citygen place lasthopecitygen:residential/small/ruined_house`. Manual placement ignores plot/terrain checks and changes blocks in the world.
+An operator can find the nearest planned city with `/citygen locate`, check loaded definitions with `/citygen list`, and place a specific one at their position with `/citygen place lasthopecitygen:residential/small/ruined_house`. Cities appear only while new chunks generate; the locate command reports the seed-based plan and cannot guarantee that all cells survive water or steep terrain checks. Manual placement ignores plot/terrain checks and changes blocks in the world.
 
 ## Development
 
