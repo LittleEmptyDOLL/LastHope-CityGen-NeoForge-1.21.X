@@ -1,0 +1,22 @@
+{
+  "type": "single",
+  "category": "lasthopecitygen:residential",
+  "size": "small",
+  "dimensions": {
+    "width": 9,
+    "depth": 11,
+    "height": 7
+  },
+  "footprint": {
+    "offset_x": 0,
+    "offset_z": 0,
+    "width": 9,
+    "depth": 11
+  },
+  "weight": 10,
+  "tags": [
+    "house",
+    "detached"
+  ],
+  "template": "lasthopecitygen:residential/small/example_house"
+}
