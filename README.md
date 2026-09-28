@@ -1,25 +1,40 @@
+# Last Hope City Generation
 
-Installation information
-=======
+NeoForge 1.21.1 generator for small, deterministic abandoned city blocks.
 
-This template repository can be directly cloned to get you started with a new
-mod. Simply create a new repository cloned from this one, by following the
-instructions provided by [GitHub](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template).
+## Current generation
 
-Once you have your clone, simply open the repository in the IDE of your choice. The usual recommendation for an IDE is either IntelliJ IDEA or Eclipse.
+The Overworld is divided into 32 × 32 chunk regions. Each region has a one-in-six seed-dependent chance of containing an 8 × 8 chunk city, centered in that region. The city has two north–south and two east–west streets, with intersections and lots between them. Plans are pure functions of the world seed and chunk coordinates; visiting chunks in a different order does not change the plan. Roads, pavements and shallow supports are made in code. The current sample residential building is a small NBT template. Industrial and civic lots remain vacant until templates are supplied.
 
-If at any point you are missing libraries in your IDE, or you've run into problems you can
-run `gradlew --refresh-dependencies` to refresh the local cache. `gradlew clean` to reset everything 
-{this does not affect your code} and then start the process again.
+Cities currently follow terrain and are intentionally limited to individual chunks for buildings. Rough or flooded lots remain empty. Roads are not yet leveled across steep slopes; generation is intended for reasonably flat terrain. No roads link separate cities yet.
 
-Mapping Names:
-============
-By default, the MDK is configured to use the official mapping names from Mojang for methods and fields 
-in the Minecraft codebase. These names are covered by a specific license. All modders should be aware of this
-license. For the latest license text, refer to the mapping file itself, or the reference copy here:
-https://github.com/NeoForged/NeoForm/blob/main/Mojang.md
+## Adding buildings
 
-Additional Resources: 
-==========
-Community Documentation: https://docs.neoforged.net/  
-NeoForged Discord: https://discord.neoforged.net/
+Put structure-block NBT files in `data/<namespace>/structure/<path>.nbt` (for instance `data/lasthopecitygen/structure/city/residential/ruined_house.nbt`). Put a matching definition JSON in `data/<namespace>/citygen/structures/<district>/<size>/<name>.json`:
+
+```json
+{
+  "type": "single",
+  "category": "lasthopecitygen:residential",
+  "size": "small",
+  "dimensions": {"width": 9, "depth": 9, "height": 5},
+  "footprint": {"offset_x": 0, "offset_z": 0, "width": 9, "depth": 9},
+  "front": "north",
+  "weight": 10,
+  "tags": ["house", "ruined"],
+  "template": "lasthopecitygen:city/residential/ruined_house"
+}
+```
+
+`dimensions` must match the NBT size. `footprint` describes its occupied area within those dimensions. Current automatic placement accepts buildings no larger than 12 × 12 blocks, including after rotation. `front` is the entrance-facing direction in the unrotated template. `weight` controls selection within a category. The catalog retains `size` and `tags` for future plot rules. Only the `single` type is implemented; `composite` and `jigsaw` are reserved. Definitions can be added or overridden by datapacks and reload with `/reload`.
+
+An operator can check loaded definitions with `/citygen list` and place a specific one at their position with `/citygen place lasthopecitygen:residential/small/ruined_house`. Manual placement ignores plot/terrain checks and changes blocks in the world.
+
+## Development
+
+Run `./gradlew build` with JDK 21 and network access for the NeoForge dependencies. The isolated planning check can be run with any recent JDK:
+
+```sh
+javac -d /tmp/citygen-plan src/main/java/com/littleemptydoll/lasthopecitygen/worldgen/CityPlan.java src/test/java/com/littleemptydoll/lasthopecitygen/worldgen/CityPlanCheck.java
+java -ea -cp /tmp/citygen-plan com.littleemptydoll.lasthopecitygen.worldgen.CityPlanCheck
+```
