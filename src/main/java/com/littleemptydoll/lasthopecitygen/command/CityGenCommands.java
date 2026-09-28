@@ -6,6 +6,7 @@ import com.littleemptydoll.lasthopecitygen.structure.definition.StructureDefinit
 import com.littleemptydoll.lasthopecitygen.structure.definition.StructureType;
 import com.littleemptydoll.lasthopecitygen.structure.placement.StructurePlacement;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.core.BlockPos;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
@@ -64,7 +65,7 @@ public final class CityGenCommands {
 
         StructurePlacement placement = StructurePlacement.at(
                 definition,
-                source.getPlayerOrException().blockPosition(),
+                BlockPos.containing(source.getPosition()),
                 Rotation.NONE
         );
 
