@@ -1,0 +1,7 @@
+{
+  "template": "lasthopecitygen:city/residential/ruined_house",
+  "width": 9,
+  "depth": 9,
+  "front": "north",
+  "weight": 1
+}
