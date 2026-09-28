@@ -6,6 +6,7 @@ import com.littleemptydoll.lasthopecitygen.structure.definition.StructureDefinit
 import com.littleemptydoll.lasthopecitygen.structure.definition.StructureType;
 import com.littleemptydoll.lasthopecitygen.structure.placement.StructurePlacement;
 import com.littleemptydoll.lasthopecitygen.worldgen.CityPlan;
+import com.littleemptydoll.lasthopecitygen.worldgen.CitySite;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.commands.CommandSourceStack;
@@ -14,6 +15,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.world.level.levelgen.RandomState;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
 import java.util.Optional;
@@ -52,14 +55,18 @@ public final class CityGenCommands {
             return 0;
         }
         BlockPos position = BlockPos.containing(source.getPosition());
+        ChunkGenerator generator = source.getLevel().getChunkSource().getGenerator();
+        RandomState randomState = source.getLevel().getChunkSource().randomState();
         Optional<CityPlan.CityCenter> found = CityPlan.nearestCity(source.getLevel().getSeed(),
-                position.getX(), position.getZ());
+                position.getX(), position.getZ(),
+                center -> CitySite.isSuitable(generator, source.getLevel(), randomState,
+                        center.blockX(), center.blockZ()));
         if (found.isEmpty()) {
-            source.sendFailure(Component.literal("No planned city found nearby"));
+            source.sendFailure(Component.literal("No city on suitable land found nearby"));
             return 0;
         }
         CityPlan.CityCenter city = found.get();
-        source.sendSuccess(() -> Component.literal("Nearest planned city center: X="
+        source.sendSuccess(() -> Component.literal("Nearest eligible city center: X="
                 + city.blockX() + ", Z=" + city.blockZ() + " (generates in new chunks)"), false);
         return 1;
     }
