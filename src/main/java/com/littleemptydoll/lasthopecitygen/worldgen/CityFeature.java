@@ -14,7 +14,6 @@ import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.feature.Feature;
 import net.minecraft.world.level.levelgen.feature.FeaturePlaceContext;
 import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration;
@@ -29,7 +28,6 @@ import java.util.Optional;
 
 /** Each feature invocation writes only to its own chunk. */
 public final class CityFeature extends Feature<NoneFeatureConfiguration> {
-    private static final int MAX_EARTHWORK = 10;
     private static final int LANE_HALF_WIDTH = 3;
     private static final int SIDEWALK_HALF_WIDTH = 5;
     private static final int PATH_HALF_WIDTH = 1;
@@ -46,10 +44,7 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
         CityPlan.Cell cell = CityPlan.at(level.getSeed(), cx, cz);
         if (cell.kind() == CityPlan.Kind.OUTSIDE || cell.kind() == CityPlan.Kind.PARK) return false;
         int minX = cx * 16, minZ = cz * 16;
-        int surface = level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, minX + 8, minZ + 8);
-        if (surface <= level.getMinBuildHeight()
-                || !level.getFluidState(new BlockPos(minX + 8, surface - 1, minZ + 8)).isEmpty()) return false;
-        RoadProfile profile = new RoadProfile(level, context.chunkGenerator());
+        RoadProfile profile = new RoadProfile(level, context.chunkGenerator(), cx, cz);
         if (cell.kind() == CityPlan.Kind.LOT) return placeLot(level, profile, minX, minZ, cell);
         return placeRoad(level, profile, minX, minZ, cx, cz, cell);
     }
@@ -66,20 +61,36 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
         if (south.kind() == CityPlan.Kind.LOT && south.front() == CityPlan.Front.NORTH) access |= CityPlan.SOUTH;
         if (west.kind() == CityPlan.Kind.LOT && west.front() == CityPlan.Front.EAST) access |= CityPlan.WEST;
         int roads = cell.connections();
-        // Validate the complete paved area before changing any blocks in this chunk.
+        // First soften the edge of the roadway within this chunk. Its paved arms
+        // connect to the same grade in the adjacent road chunk.
         for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++) {
-            if (!paved(roads, access, dx, dz)) continue;
+            if (paved(roads, access, dx, dz)) continue;
+            int distance = distanceToPavement(roads, access, dx, dz);
+            if (distance > 3) continue;
             int x = minX + dx, z = minZ + dz;
-            if (!canPrepare(level, x, z, profile.surfaceY(x, z) - 1, 4)) return false;
+            TerrainWorks.shoulder(level, x, z, profile.surfaceY(x, z) - 1, distance, 4);
         }
         for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++) {
             if (!paved(roads, access, dx, dz)) continue;
             int x = minX + dx, z = minZ + dz;
             BlockState surface = arms(roads, dx, dz, LANE_HALF_WIDTH)
                     ? Blocks.GRAY_CONCRETE.defaultBlockState() : Blocks.STONE_BRICKS.defaultBlockState();
-            prepare(level, x, z, profile.surfaceY(x, z) - 1, surface, 4);
+            TerrainWorks.grade(level, x, z, profile.surfaceY(x, z) - 1,
+                    surface, 4, Blocks.STONE.defaultBlockState());
         }
         return true;
+    }
+
+    private static int distanceToPavement(int roads, int access, int x, int z) {
+        for (int distance = 1; distance <= 3; distance++) {
+            for (int dx = -distance; dx <= distance; dx++) for (int dz = -distance; dz <= distance; dz++) {
+                if (Math.abs(dx) + Math.abs(dz) != distance) continue;
+                int nx = x + dx, nz = z + dz;
+                if (nx >= 0 && nx < 16 && nz >= 0 && nz < 16 && paved(roads, access, nx, nz))
+                    return distance;
+            }
+        }
+        return 4;
     }
 
     private static boolean paved(int roads, int access, int dx, int dz) {
@@ -101,8 +112,13 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
         ResourceLocation category = ResourceLocation.fromNamespaceAndPath(LastHopeCityGen.MOD_ID,
                 cell.district().name().toLowerCase(Locale.ROOT));
         Optional<StructureDefinition> selected = StructureCatalog.INSTANCE.choose(category, 12, 12, cell.lotSeed());
-        if (selected.isEmpty()) return false;
-        StructureDefinition definition = selected.get();
+        if (selected.isPresent() && placeBuilding(level, profile, minX, minZ, cell, selected.get()))
+            return true;
+        return placeVacantLot(level, profile, minX, minZ, cell.front());
+    }
+
+    private static boolean placeBuilding(WorldGenLevel level, RoadProfile profile, int minX, int minZ,
+                                         CityPlan.Cell cell, StructureDefinition definition) {
         Optional<StructureTemplate> found = level.getLevel().getStructureManager().get(definition.singleSource().template());
         if (found.isEmpty()) return false;
         StructureTemplate template = found.get();
@@ -124,7 +140,7 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
                 : cell.front() == CityPlan.Front.SOUTH ? minZ + 15 : minZ + 8;
         int surfaceY = profile.surfaceY(edgeX, edgeZ);
         int groundY = surfaceY - 1;
-        if (surfaceY <= level.getMinBuildHeight() || surfaceY + template.getSize().getY() + 2 >= level.getMaxBuildHeight())
+        if (!TerrainWorks.fitsHeight(level, groundY, template.getSize().getY() + 2))
             return false;
 
         int buildingMinX = x + bounds.minX(), buildingMaxX = x + bounds.maxX();
@@ -132,21 +148,71 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
         List<BlockPos> approach = approach(minX, minZ, cell.front(),
                 buildingMinX, buildingMaxX, buildingMinZ, buildingMaxZ);
         for (int dx = 2; dx <= 13; dx++) for (int dz = 2; dz <= 13; dz++)
-            if (!canPrepare(level, minX + dx, minZ + dz, groundY, template.getSize().getY() + 2)) return false;
+            if (!TerrainWorks.canBuildLot(level, minX + dx, minZ + dz, groundY)) return false;
         for (BlockPos pos : approach)
-            if (!canPrepare(level, pos.getX(), pos.getZ(), groundY, 4)) return false;
+            if (!TerrainWorks.canBuildLot(level, pos.getX(), pos.getZ(), groundY)) return false;
+
+        // The outer two blocks slope back to the untouched terrain. The pad and
+        // approach are written afterward to keep the entrance completely clear.
+        for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++) {
+            int distance = Math.max(Math.max(2 - dx, dx - 13), Math.max(2 - dz, dz - 13));
+            if (distance <= 0 || approach.contains(new BlockPos(minX + dx, 0, minZ + dz))) continue;
+            TerrainWorks.shoulder(level, minX + dx, minZ + dz, groundY, distance, 3);
+        }
 
         for (int dx = 2; dx <= 13; dx++) for (int dz = 2; dz <= 13; dz++)
-            prepare(level, minX + dx, minZ + dz, groundY, Blocks.STONE_BRICKS.defaultBlockState(),
-                    template.getSize().getY() + 2);
+            TerrainWorks.grade(level, minX + dx, minZ + dz, groundY,
+                    Blocks.STONE_BRICKS.defaultBlockState(), template.getSize().getY() + 2,
+                    Blocks.STONE.defaultBlockState());
         for (BlockPos pos : approach)
-            prepare(level, pos.getX(), pos.getZ(), groundY, Blocks.STONE_BRICKS.defaultBlockState(), 4);
+            TerrainWorks.grade(level, pos.getX(), pos.getZ(), groundY,
+                    Blocks.STONE_BRICKS.defaultBlockState(), 4, Blocks.STONE.defaultBlockState());
 
         BlockPos origin = new BlockPos(x, surfaceY, z);
         BoundingBox chunkBounds = new BoundingBox(minX, level.getMinBuildHeight(), minZ,
                 minX + 15, level.getMaxBuildHeight() - 1, minZ + 15);
         return SingleStructureBuilder.INSTANCE.build(level, StructurePlacement.at(definition, origin, rotation),
                 chunkBounds, RandomSource.create(cell.lotSeed()));
+    }
+
+    /** Every planned frontage ends at a small terrace even if a building cannot fit. */
+    private static boolean placeVacantLot(WorldGenLevel level, RoadProfile profile, int minX, int minZ,
+                                          CityPlan.Front front) {
+        int edgeX = front == CityPlan.Front.WEST ? minX : front == CityPlan.Front.EAST ? minX + 15 : minX + 8;
+        int edgeZ = front == CityPlan.Front.NORTH ? minZ : front == CityPlan.Front.SOUTH ? minZ + 15 : minZ + 8;
+        int groundY = profile.surfaceY(edgeX, edgeZ) - 1;
+        if (!TerrainWorks.fitsHeight(level, groundY, 4)) return false;
+        for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++) {
+            int cross = terraceCross(front, dx, dz);
+            int inward = terraceInward(front, dx, dz);
+            int distance = Math.max(6 - cross, Math.max(cross - 9, 0)) + Math.max(inward - 5, 0);
+            if (distance > 0 && distance <= 2)
+                TerrainWorks.shoulder(level, minX + dx, minZ + dz, groundY, distance, 3);
+        }
+        for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++) {
+            int cross = terraceCross(front, dx, dz);
+            int inward = terraceInward(front, dx, dz);
+            if (cross < 6 || cross > 9 || inward > 5) continue;
+            TerrainWorks.grade(level, minX + dx, minZ + dz, groundY,
+                    Blocks.STONE_BRICKS.defaultBlockState(), 4, Blocks.STONE.defaultBlockState());
+            if (inward == 5 || inward >= 2 && (cross == 6 || cross == 9))
+                level.setBlock(new BlockPos(minX + dx, groundY + 1, minZ + dz),
+                        Blocks.STONE_BRICK_WALL.defaultBlockState(), 2);
+        }
+        return true;
+    }
+
+    private static int terraceCross(CityPlan.Front front, int dx, int dz) {
+        return front == CityPlan.Front.NORTH || front == CityPlan.Front.SOUTH ? dx : dz;
+    }
+
+    private static int terraceInward(CityPlan.Front front, int dx, int dz) {
+        return switch (front) {
+            case NORTH -> dz;
+            case EAST -> 15 - dx;
+            case SOUTH -> 15 - dz;
+            case WEST -> dx;
+        };
     }
 
     private static List<BlockPos> approach(int minX, int minZ, CityPlan.Front front,
@@ -172,22 +238,6 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
             }
         }
         return path;
-    }
-
-    private static boolean canPrepare(WorldGenLevel level, int x, int z, int targetY, int clearance) {
-        if (targetY <= level.getMinBuildHeight() || targetY + clearance >= level.getMaxBuildHeight()) return false;
-        int naturalY = level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z) - 1;
-        return Math.abs(naturalY - targetY) <= MAX_EARTHWORK
-                && level.getFluidState(new BlockPos(x, naturalY, z)).isEmpty();
-    }
-
-    private static void prepare(WorldGenLevel level, int x, int z, int targetY, BlockState surface, int clearance) {
-        int naturalY = level.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z) - 1;
-        for (int y = naturalY + 1; y < targetY; y++)
-            level.setBlock(new BlockPos(x, y, z), Blocks.STONE.defaultBlockState(), 2);
-        level.setBlock(new BlockPos(x, targetY, z), surface, 2);
-        for (int y = targetY + 1; y <= Math.max(targetY, naturalY) + clearance; y++)
-            level.setBlock(new BlockPos(x, y, z), Blocks.AIR.defaultBlockState(), 2);
     }
 
     private static Rotation rotation(Direction from, CityPlan.Front to) {
