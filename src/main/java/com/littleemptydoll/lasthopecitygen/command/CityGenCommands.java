@@ -12,6 +12,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Rotation;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
@@ -46,6 +47,10 @@ public final class CityGenCommands {
     }
 
     private static int locate(CommandSourceStack source) {
+        if (!source.getLevel().dimension().equals(Level.OVERWORLD)) {
+            source.sendFailure(Component.literal("Cities are planned only in the Overworld"));
+            return 0;
+        }
         BlockPos position = BlockPos.containing(source.getPosition());
         Optional<CityPlan.CityCenter> found = CityPlan.nearestCity(source.getLevel().getSeed(),
                 position.getX(), position.getZ());
