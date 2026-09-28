@@ -16,14 +16,13 @@ import java.util.stream.Collectors;
 
 public final class StructureCatalog extends SimpleJsonResourceReloadListener {
     public static final String DIRECTORY = "citygen/structures";
-    public static final StructureCatalog INSTANCE = new StructureCatalog();
-
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    public static final StructureCatalog INSTANCE = new StructureCatalog();
 
     private volatile Map<ResourceLocation, StructureDefinition> definitions = Map.of();
 
     private StructureCatalog() {
-        super(GSON, DIRECTORY);
+        super(Objects.requireNonNull(GSON, "Structure catalog Gson must be initialized first"), DIRECTORY);
     }
 
     public static void onAddReloadListeners(AddReloadListenerEvent event) {
