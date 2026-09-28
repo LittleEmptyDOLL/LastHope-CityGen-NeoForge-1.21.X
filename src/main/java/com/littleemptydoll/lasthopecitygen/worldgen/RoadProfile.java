@@ -8,18 +8,26 @@ import net.minecraft.world.level.levelgen.RandomState;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Samples unmodified terrain at shared 32-block anchors; results do not depend on chunk order. */
+/** Shared, order-independent road grade. Neighboring chunks sample the same anchors. */
 final class RoadProfile {
     private static final int SPACING = 32;
+    private static final int MAX_CITY_RELIEF = 12;
     private final WorldGenLevel level;
     private final ChunkGenerator generator;
     private final RandomState randomState;
+    private final int cityHeight;
     private final Map<Long, Integer> samples = new HashMap<>();
 
-    RoadProfile(WorldGenLevel level, ChunkGenerator generator) {
+    RoadProfile(WorldGenLevel level, ChunkGenerator generator, int chunkX, int chunkZ) {
         this.level = level;
         this.generator = generator;
         this.randomState = level.getLevel().getChunkSource().randomState();
+        int regionX = Math.floorDiv(chunkX, CityPlan.REGION);
+        int regionZ = Math.floorDiv(chunkZ, CityPlan.REGION);
+        int centerX = regionX * CityPlan.REGION_BLOCKS + CityPlan.REGION_BLOCKS / 2;
+        int centerZ = regionZ * CityPlan.REGION_BLOCKS + CityPlan.REGION_BLOCKS / 2;
+        this.cityHeight = generator.getBaseHeight(centerX, centerZ,
+                Heightmap.Types.WORLD_SURFACE_WG, level, randomState);
     }
 
     int surfaceY(int x, int z) {
@@ -36,7 +44,15 @@ final class RoadProfile {
 
     private int sample(int gx, int gz) {
         long key = ((long) gx << 32) ^ (gz & 0xffffffffL);
-        return samples.computeIfAbsent(key, ignored -> generator.getBaseHeight(gx * SPACING, gz * SPACING,
-                Heightmap.Types.WORLD_SURFACE_WG, level, randomState));
+        return samples.computeIfAbsent(key, ignored -> {
+            int natural = generator.getBaseHeight(gx * SPACING, gz * SPACING,
+                    Heightmap.Types.WORLD_SURFACE_WG, level, randomState);
+            int limited = Math.max(cityHeight - MAX_CITY_RELIEF,
+                    Math.min(cityHeight + MAX_CITY_RELIEF, natural));
+            // Keep open water below the deck, rather than cutting a channel through it.
+            int aboveWater = Math.max(generator.getSeaLevel() + 1, limited);
+            return Math.max(level.getMinBuildHeight() + 8,
+                    Math.min(level.getMaxBuildHeight() - 8, aboveWater));
+        });
     }
 }
