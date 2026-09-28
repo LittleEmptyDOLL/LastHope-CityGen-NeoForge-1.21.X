@@ -1,0 +1,24 @@
+{
+  "type": "single",
+  "category": "lasthopecitygen:residential",
+  "size": "small",
+  "dimensions": {
+    "width": 11,
+    "depth": 11,
+    "height": 9
+  },
+  "footprint": {
+    "offset_x": 0,
+    "offset_z": 0,
+    "width": 11,
+    "depth": 11
+  },
+  "front": "north",
+  "weight": 3,
+  "tags": [
+    "apartments",
+    "urban",
+    "ruined"
+  ],
+  "template": "lasthopecitygen:city/residential/apartment"
+}

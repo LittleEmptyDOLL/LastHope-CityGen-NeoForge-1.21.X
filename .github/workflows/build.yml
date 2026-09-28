@@ -21,5 +21,10 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Verify test structure resources
+        run: |
+          python3 tools/generate_test_structures.py --check
+          python3 tools/check_structure_resources.py
+
       - name: Build with Gradle
         run: ./gradlew build checkCityPlan --no-daemon

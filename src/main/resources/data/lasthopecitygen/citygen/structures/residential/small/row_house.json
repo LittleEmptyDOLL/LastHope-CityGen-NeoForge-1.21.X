@@ -1,0 +1,24 @@
+{
+  "type": "single",
+  "category": "lasthopecitygen:residential",
+  "size": "small",
+  "dimensions": {
+    "width": 8,
+    "depth": 10,
+    "height": 6
+  },
+  "footprint": {
+    "offset_x": 0,
+    "offset_z": 0,
+    "width": 8,
+    "depth": 10
+  },
+  "front": "north",
+  "weight": 9,
+  "tags": [
+    "house",
+    "urban",
+    "ruined"
+  ],
+  "template": "lasthopecitygen:city/residential/row_house"
+}

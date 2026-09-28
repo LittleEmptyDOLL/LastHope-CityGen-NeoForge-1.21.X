@@ -1,0 +1,24 @@
+{
+  "type": "single",
+  "category": "lasthopecitygen:civic",
+  "size": "small",
+  "dimensions": {
+    "width": 12,
+    "depth": 10,
+    "height": 7
+  },
+  "footprint": {
+    "offset_x": 0,
+    "offset_z": 0,
+    "width": 12,
+    "depth": 10
+  },
+  "front": "north",
+  "weight": 4,
+  "tags": [
+    "fire_station",
+    "service",
+    "ruined"
+  ],
+  "template": "lasthopecitygen:city/civic/fire_station"
+}
