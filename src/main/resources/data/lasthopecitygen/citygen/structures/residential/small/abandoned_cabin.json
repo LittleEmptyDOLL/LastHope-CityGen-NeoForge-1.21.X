@@ -1,0 +1,24 @@
+{
+  "type": "single",
+  "category": "lasthopecitygen:residential",
+  "size": "small",
+  "dimensions": {
+    "width": 7,
+    "depth": 7,
+    "height": 5
+  },
+  "footprint": {
+    "offset_x": 0,
+    "offset_z": 0,
+    "width": 7,
+    "depth": 7
+  },
+  "front": "north",
+  "weight": 8,
+  "tags": [
+    "house",
+    "wooden",
+    "ruined"
+  ],
+  "template": "lasthopecitygen:city/residential/abandoned_cabin"
+}

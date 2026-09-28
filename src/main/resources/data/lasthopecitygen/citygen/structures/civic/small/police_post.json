@@ -1,0 +1,24 @@
+{
+  "type": "single",
+  "category": "lasthopecitygen:civic",
+  "size": "small",
+  "dimensions": {
+    "width": 8,
+    "depth": 8,
+    "height": 6
+  },
+  "footprint": {
+    "offset_x": 0,
+    "offset_z": 0,
+    "width": 8,
+    "depth": 8
+  },
+  "front": "north",
+  "weight": 6,
+  "tags": [
+    "police",
+    "security",
+    "ruined"
+  ],
+  "template": "lasthopecitygen:city/civic/police_post"
+}

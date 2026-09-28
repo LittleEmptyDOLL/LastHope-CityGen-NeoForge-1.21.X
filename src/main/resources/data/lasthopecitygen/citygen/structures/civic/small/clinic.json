@@ -1,0 +1,24 @@
+{
+  "type": "single",
+  "category": "lasthopecitygen:civic",
+  "size": "small",
+  "dimensions": {
+    "width": 10,
+    "depth": 9,
+    "height": 6
+  },
+  "footprint": {
+    "offset_x": 0,
+    "offset_z": 0,
+    "width": 10,
+    "depth": 9
+  },
+  "front": "north",
+  "weight": 7,
+  "tags": [
+    "medical",
+    "clinic",
+    "ruined"
+  ],
+  "template": "lasthopecitygen:city/civic/clinic"
+}

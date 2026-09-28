@@ -1,0 +1,24 @@
+{
+  "type": "single",
+  "category": "lasthopecitygen:industrial",
+  "size": "small",
+  "dimensions": {
+    "width": 9,
+    "depth": 8,
+    "height": 6
+  },
+  "footprint": {
+    "offset_x": 0,
+    "offset_z": 0,
+    "width": 9,
+    "depth": 8
+  },
+  "front": "north",
+  "weight": 8,
+  "tags": [
+    "workshop",
+    "industrial",
+    "ruined"
+  ],
+  "template": "lasthopecitygen:city/industrial/workshop"
+}

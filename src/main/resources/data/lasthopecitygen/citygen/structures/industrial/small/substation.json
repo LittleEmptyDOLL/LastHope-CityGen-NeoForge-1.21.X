@@ -1,0 +1,24 @@
+{
+  "type": "single",
+  "category": "lasthopecitygen:industrial",
+  "size": "small",
+  "dimensions": {
+    "width": 7,
+    "depth": 7,
+    "height": 5
+  },
+  "footprint": {
+    "offset_x": 0,
+    "offset_z": 0,
+    "width": 7,
+    "depth": 7
+  },
+  "front": "north",
+  "weight": 4,
+  "tags": [
+    "utility",
+    "power",
+    "ruined"
+  ],
+  "template": "lasthopecitygen:city/industrial/substation"
+}
