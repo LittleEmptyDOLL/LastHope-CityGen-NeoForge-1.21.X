@@ -22,6 +22,12 @@ public final class CityPlanCheck {
         assert lots == 36 : lots;
         assert CityPlan.at(seed, baseX - 1, baseZ).kind() == CityPlan.Kind.OUTSIDE;
         assert CityPlan.at(seed, baseX + 8, baseZ).kind() == CityPlan.Kind.OUTSIDE;
+        CityPlan.CityCenter nearest = CityPlan.nearestCity(seed, baseX * 16 + 64, baseZ * 16 + 64).orElseThrow();
+        assert CityPlan.hasCity(seed, Math.floorDiv(nearest.blockX(), CityPlan.REGION_BLOCKS),
+                Math.floorDiv(nearest.blockZ(), CityPlan.REGION_BLOCKS));
+        assert nearest.blockX() == baseX * 16 + 64 && nearest.blockZ() == baseZ * 16 + 64;
+        assert CityPlan.at(seed, Math.floorDiv(nearest.blockX(), 16), Math.floorDiv(nearest.blockZ(), 16)).kind()
+                == CityPlan.Kind.INTERSECTION;
         System.out.println("CityPlanCheck passed");
     }
 }

@@ -1,16 +1,21 @@
 package com.littleemptydoll.lasthopecitygen.worldgen;
 
+import java.util.Optional;
+
 /** Pure, order-independent planning. All coordinates here are chunk coordinates. */
 public final class CityPlan {
     public static final int REGION = 32;
     public static final int SIZE = 8;
+    public static final int REGION_BLOCKS = REGION * 16;
     private static final int OFFSET = (REGION - SIZE) / 2;
+    private static final int SEARCH_RADIUS_REGIONS = 16;
 
     public enum Kind { OUTSIDE, ROAD_NS, ROAD_EW, INTERSECTION, LOT }
     public enum District { RESIDENTIAL, INDUSTRIAL, CIVIC }
     public enum Front { NORTH, EAST, SOUTH, WEST }
 
     public record Cell(Kind kind, District district, Front front, long lotSeed) { }
+    public record CityCenter(int blockX, int blockZ) { }
 
     private CityPlan() { }
 
@@ -41,6 +46,29 @@ public final class CityPlan {
     public static boolean hasCity(long seed, int regionX, int regionZ) {
         return Long.remainderUnsigned(mix(seed ^ ((long) regionX * 0xD6E8FEB86659FD93L)
                 ^ ((long) regionZ * 0xA5A3564E27F8862DL)), 6) == 0;
+    }
+
+    /** Finds a planned city; terrain may prevent some cells from being placed. */
+    public static Optional<CityCenter> nearestCity(long seed, int blockX, int blockZ) {
+        int regionX = Math.floorDiv(blockX, REGION_BLOCKS);
+        int regionZ = Math.floorDiv(blockZ, REGION_BLOCKS);
+        CityCenter nearest = null;
+        long bestDistance = Long.MAX_VALUE;
+        for (int rx = regionX - SEARCH_RADIUS_REGIONS; rx <= regionX + SEARCH_RADIUS_REGIONS; rx++) {
+            for (int rz = regionZ - SEARCH_RADIUS_REGIONS; rz <= regionZ + SEARCH_RADIUS_REGIONS; rz++) {
+                if (!hasCity(seed, rx, rz)) continue;
+                int x = rx * REGION_BLOCKS + REGION_BLOCKS / 2;
+                int z = rz * REGION_BLOCKS + REGION_BLOCKS / 2;
+                long dx = (long) x - blockX;
+                long dz = (long) z - blockZ;
+                long distance = dx * dx + dz * dz;
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    nearest = new CityCenter(x, z);
+                }
+            }
+        }
+        return Optional.ofNullable(nearest);
     }
 
     public static long mix(long value) {
