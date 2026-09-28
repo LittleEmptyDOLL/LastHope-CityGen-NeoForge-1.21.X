@@ -60,7 +60,7 @@ public final class CityGenCommands {
         Optional<CityPlan.CityCenter> found = CityPlan.nearestCity(source.getLevel().getSeed(),
                 position.getX(), position.getZ(),
                 center -> CitySite.isSuitable(generator, source.getLevel(), randomState,
-                        center.blockX(), center.blockZ()));
+                        source.getLevel().getSeed(), center.blockX(), center.blockZ()));
         if (found.isEmpty()) {
             source.sendFailure(Component.literal("No city on suitable land found nearby"));
             return 0;
