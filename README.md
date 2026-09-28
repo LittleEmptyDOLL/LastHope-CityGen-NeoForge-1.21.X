@@ -10,19 +10,25 @@ Cities currently follow terrain and are intentionally limited to individual chun
 
 ## Adding buildings
 
-Put structure-block NBT files in `data/<namespace>/structure/<path>.nbt` (for instance `data/lasthopecitygen/structure/city/residential/ruined_house.nbt`). Put a matching metadata JSON in `data/<namespace>/city_templates/<district>/<name>.json`, where district is `residential`, `industrial`, or `civic`:
+Put structure-block NBT files in `data/<namespace>/structure/<path>.nbt` (for instance `data/lasthopecitygen/structure/city/residential/ruined_house.nbt`). Put a matching definition JSON in `data/<namespace>/citygen/structures/<district>/<size>/<name>.json`:
 
 ```json
 {
-  "template": "lasthopecitygen:city/residential/ruined_house",
-  "width": 9,
-  "depth": 9,
+  "type": "single",
+  "category": "lasthopecitygen:residential",
+  "size": "small",
+  "dimensions": {"width": 9, "depth": 9, "height": 5},
+  "footprint": {"offset_x": 0, "offset_z": 0, "width": 9, "depth": 9},
   "front": "north",
-  "weight": 1
+  "weight": 10,
+  "tags": ["house", "ruined"],
+  "template": "lasthopecitygen:city/residential/ruined_house"
 }
 ```
 
-`width` and `depth` must match the actual NBT dimensions and each be at most 12 blocks. `front` is the entrance-facing direction in the unrotated template. `weight` controls selection within that district. Metadata can be added or overridden by datapacks and reloads with `/reload`. Templates can be made in game with structure blocks. The sample house can be replaced by another template of the same dimensions.
+`dimensions` must match the NBT size. `footprint` describes its occupied area within those dimensions. Current automatic placement accepts buildings no larger than 12 × 12 blocks, including after rotation. `front` is the entrance-facing direction in the unrotated template. `weight` controls selection within a category. The catalog retains `size` and `tags` for future plot rules. Only the `single` type is implemented; `composite` and `jigsaw` are reserved. Definitions can be added or overridden by datapacks and reload with `/reload`.
+
+An operator can check loaded definitions with `/citygen list` and place a specific one at their position with `/citygen place lasthopecitygen:residential/small/ruined_house`. Manual placement ignores plot/terrain checks and changes blocks in the world.
 
 ## Development
 

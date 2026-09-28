@@ -1,7 +1,14 @@
 package com.littleemptydoll.lasthopecitygen.worldgen;
 
+import com.littleemptydoll.lasthopecitygen.LastHopeCityGen;
+import com.littleemptydoll.lasthopecitygen.structure.builder.SingleStructureBuilder;
+import com.littleemptydoll.lasthopecitygen.structure.catalog.StructureCatalog;
+import com.littleemptydoll.lasthopecitygen.structure.definition.StructureDefinition;
+import com.littleemptydoll.lasthopecitygen.structure.placement.StructurePlacement;
 import com.mojang.serialization.Codec;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.block.Blocks;
@@ -14,6 +21,7 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 
+import java.util.Locale;
 import java.util.Optional;
 
 /** Called once per chunk via a placed feature without placement modifiers. */
@@ -64,19 +72,22 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
     }
 
     private static boolean placeLot(WorldGenLevel level, int minX, int minZ, CityPlan.Cell cell) {
-        TemplateCatalog.Entry entry = TemplateCatalog.choose(cell.district(), cell.lotSeed());
-        if (entry == null) return false;
-        Optional<StructureTemplate> found = level.getLevel().getStructureManager().get(entry.template());
+        ResourceLocation category = ResourceLocation.fromNamespaceAndPath(LastHopeCityGen.MOD_ID,
+                cell.district().name().toLowerCase(Locale.ROOT));
+        Optional<StructureDefinition> selected = StructureCatalog.INSTANCE.choose(category, 12, 12, cell.lotSeed());
+        if (selected.isEmpty()) return false;
+        StructureDefinition definition = selected.get();
+        Optional<StructureTemplate> found = level.getLevel().getStructureManager().get(definition.singleSource().template());
         if (found.isEmpty()) return false;
         StructureTemplate template = found.get();
-        if (template.getSize().getX() != entry.width() || template.getSize().getZ() != entry.depth()) return false;
+        if (template.getSize().getX() != definition.dimensions().width()
+                || template.getSize().getY() != definition.dimensions().height()
+                || template.getSize().getZ() != definition.dimensions().depth()) return false;
 
-        Rotation rotation = rotation(entry.front(), cell.front());
-        StructurePlaceSettings settings = new StructurePlaceSettings()
-                .setRotation(rotation)
-                .setIgnoreEntities(true)
-                .setBoundingBox(new BoundingBox(minX, level.getMinBuildHeight(), minZ,
-                        minX + 15, level.getMaxBuildHeight() - 1, minZ + 15));
+        Rotation rotation = rotation(definition.front(), cell.front());
+        BoundingBox chunkBounds = new BoundingBox(minX, level.getMinBuildHeight(), minZ,
+                minX + 15, level.getMaxBuildHeight() - 1, minZ + 15);
+        StructurePlaceSettings settings = new StructurePlaceSettings().setRotation(rotation);
         BoundingBox bounds = template.getBoundingBox(settings, BlockPos.ZERO);
         int width = bounds.maxX() - bounds.minX() + 1;
         int depth = bounds.maxZ() - bounds.minZ() + 1;
@@ -92,12 +103,19 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
                 return false;
         }
         BlockPos origin = new BlockPos(x, y, z);
-        RandomSource random = RandomSource.create(cell.lotSeed());
-        return template.placeInWorld(level, origin, origin, settings, random, 2);
+        return SingleStructureBuilder.INSTANCE.build(level, StructurePlacement.at(definition, origin, rotation),
+                chunkBounds, RandomSource.create(cell.lotSeed()));
     }
 
-    private static Rotation rotation(CityPlan.Front from, CityPlan.Front to) {
-        int turns = Math.floorMod(to.ordinal() - from.ordinal(), 4);
+    private static Rotation rotation(Direction from, CityPlan.Front to) {
+        int fromIndex = switch (from) {
+            case NORTH -> 0;
+            case EAST -> 1;
+            case SOUTH -> 2;
+            case WEST -> 3;
+            default -> throw new IllegalArgumentException("A structure front must be horizontal");
+        };
+        int turns = Math.floorMod(to.ordinal() - fromIndex, 4);
         return switch (turns) {
             case 1 -> Rotation.CLOCKWISE_90;
             case 2 -> Rotation.CLOCKWISE_180;
