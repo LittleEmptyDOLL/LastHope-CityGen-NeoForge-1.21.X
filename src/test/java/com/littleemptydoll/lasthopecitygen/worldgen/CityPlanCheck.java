@@ -13,6 +13,11 @@ public final class CityPlanCheck {
         for (int rx = -3; rx <= 3; rx++) for (int rz = -3; rz <= 3; rz++) {
             if (CityPlan.hasCity(seed, rx, rz)) checkCity(seed, rx, rz);
         }
+        CityPlan.CityCenter first = CityPlan.nearestCity(seed, 0, 0).orElseThrow();
+        CityPlan.CityCenter next = CityPlan.nearestCity(seed, 0, 0,
+                candidate -> !candidate.equals(first)).orElseThrow();
+        assert !first.equals(next);
+        assert CityPlan.nearestCity(seed, 0, 0, candidate -> false).isEmpty();
         System.out.println("CityPlanCheck passed");
     }
 

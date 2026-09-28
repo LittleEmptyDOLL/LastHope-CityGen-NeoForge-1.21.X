@@ -22,11 +22,9 @@ final class RoadProfile {
         this.level = level;
         this.generator = generator;
         this.randomState = level.getLevel().getChunkSource().randomState();
-        int regionX = Math.floorDiv(chunkX, CityPlan.REGION);
-        int regionZ = Math.floorDiv(chunkZ, CityPlan.REGION);
-        int centerX = regionX * CityPlan.REGION_BLOCKS + CityPlan.REGION_BLOCKS / 2;
-        int centerZ = regionZ * CityPlan.REGION_BLOCKS + CityPlan.REGION_BLOCKS / 2;
-        this.cityHeight = generator.getBaseHeight(centerX, centerZ,
+        CityPlan.CityCenter center = CityPlan.centerForRegion(
+                Math.floorDiv(chunkX, CityPlan.REGION), Math.floorDiv(chunkZ, CityPlan.REGION));
+        this.cityHeight = generator.getBaseHeight(center.blockX(), center.blockZ(),
                 Heightmap.Types.WORLD_SURFACE_WG, level, randomState);
     }
 

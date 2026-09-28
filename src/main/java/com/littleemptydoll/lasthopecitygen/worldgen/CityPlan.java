@@ -1,6 +1,7 @@
 package com.littleemptydoll.lasthopecitygen.worldgen;
 
 import java.util.Optional;
+import java.util.function.Predicate;
 
 /** Pure, order-independent street and lot plan. Coordinates in at() are chunks. */
 public final class CityPlan {
@@ -97,6 +98,12 @@ public final class CityPlan {
 
     /** Finds a planned city; terrain may prevent some cells from being placed. */
     public static Optional<CityCenter> nearestCity(long seed, int blockX, int blockZ) {
+        return nearestCity(seed, blockX, blockZ, center -> true);
+    }
+
+    /** Allows callers to skip unsuitable sites without changing the seed-based plan. */
+    public static Optional<CityCenter> nearestCity(long seed, int blockX, int blockZ,
+                                                    Predicate<CityCenter> suitable) {
         int regionX = Math.floorDiv(blockX, REGION_BLOCKS);
         int regionZ = Math.floorDiv(blockZ, REGION_BLOCKS);
         CityCenter nearest = null;
@@ -104,18 +111,24 @@ public final class CityPlan {
         for (int rx = regionX - SEARCH_RADIUS_REGIONS; rx <= regionX + SEARCH_RADIUS_REGIONS; rx++) {
             for (int rz = regionZ - SEARCH_RADIUS_REGIONS; rz <= regionZ + SEARCH_RADIUS_REGIONS; rz++) {
                 if (!hasCity(seed, rx, rz)) continue;
-                int x = rx * REGION_BLOCKS + REGION_BLOCKS / 2;
-                int z = rz * REGION_BLOCKS + REGION_BLOCKS / 2;
+                CityCenter candidate = centerForRegion(rx, rz);
+                int x = candidate.blockX();
+                int z = candidate.blockZ();
                 long dx = (long) x - blockX;
                 long dz = (long) z - blockZ;
                 long distance = dx * dx + dz * dz;
-                if (distance < bestDistance) {
+                if (distance < bestDistance && suitable.test(candidate)) {
                     bestDistance = distance;
-                    nearest = new CityCenter(x, z);
+                    nearest = candidate;
                 }
             }
         }
         return Optional.ofNullable(nearest);
+    }
+
+    public static CityCenter centerForRegion(int regionX, int regionZ) {
+        return new CityCenter(regionX * REGION_BLOCKS + REGION_BLOCKS / 2,
+                regionZ * REGION_BLOCKS + REGION_BLOCKS / 2);
     }
 
     public static long mix(long value) {

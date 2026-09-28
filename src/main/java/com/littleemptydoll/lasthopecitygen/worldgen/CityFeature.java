@@ -43,6 +43,10 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
         int cz = Math.floorDiv(context.origin().getZ(), 16);
         CityPlan.Cell cell = CityPlan.at(level.getSeed(), cx, cz);
         if (cell.kind() == CityPlan.Kind.OUTSIDE || cell.kind() == CityPlan.Kind.PARK) return false;
+        CityPlan.CityCenter center = CityPlan.centerForRegion(
+                Math.floorDiv(cx, CityPlan.REGION), Math.floorDiv(cz, CityPlan.REGION));
+        if (!CitySite.isSuitable(context.chunkGenerator(), level,
+                level.getLevel().getChunkSource().randomState(), center.blockX(), center.blockZ())) return false;
         int minX = cx * 16, minZ = cz * 16;
         RoadProfile profile = new RoadProfile(level, context.chunkGenerator(), cx, cz);
         if (cell.kind() == CityPlan.Kind.LOT) return placeLot(level, profile, minX, minZ, cell);
