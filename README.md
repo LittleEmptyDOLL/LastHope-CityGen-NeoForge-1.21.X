@@ -4,9 +4,11 @@ NeoForge 1.21.1 generator for small, deterministic abandoned city blocks.
 
 ## Current generation
 
-The Overworld is divided into 32 × 32 chunk regions. Each region has a one-in-six seed-dependent chance of containing an 8 × 8 chunk city, centered in that region. Before placing any city chunk, the generator checks nine unmodified terrain samples across the city. Its center must be dry, and at most one edge sample may be water. A candidate in an ocean, broad river or lake is rejected as a whole; a narrow river crossing at one edge can still have a bridge. Every chunk uses the same test, independent of generation order. Its connected street grid has straight sections, crossroads, T junctions, corners and short optional spurs. Lots are built only when they touch a road; other cells remain open. Residential, industrial and civic lots select from the test structures below.
+The Overworld is divided into 32 × 32 chunk regions. Each region has a one-in-six seed-dependent chance of containing an 8 × 8 chunk city, centered in that region. Before any city chunk is changed, the generator samples the original surface and water height at the center of each of its 64 cells. An ocean or small island is rejected; a coast or narrow river can be included when there is enough dry ground near the center. The same seed and terrain produce the same complete layout regardless of chunk generation order. `/citygen locate` uses this same eligibility check.
 
-Roads share a terrain profile sampled every 32 blocks, limited to gentle grades across the city. Their edges slope into the surrounding ground. Shallow cuts are open; steep hills receive a short four-block-high passage, while deep valleys and water receive a supported deck. Road cells therefore remain connected even when the underlying terrain is rough or flooded. Building plots are leveled to their street frontage, with a short paved approach. If the selected building would require more than twelve blocks of earthwork, sits in water, or is unavailable, the road leads to a small paved vacant terrace instead. Each building still fits within one chunk. Unusual high-altitude water and extreme terrain still need in-game review. No roads link separate cities yet.
+The planner grows primary and secondary streets from a central anchor, scoring a regular street direction, proximity to water, relief, distance from the anchor and stable seed noise. Each proposed 16-block step checks the region boundary, terrain slope, water crossing, spacing and existing streets. Roads cross only one or two water cells at a time and must land on dry ground; a shoreline can become a waterfront street. The resulting graph has straight streets, corners, T junctions, crossroads and dead ends according to its actual connections. Connected dry areas between streets become city blocks. Their cells are classified as building lots, open park or empty ground, beach or waterfront. Only building lots with road frontage attempt a structure; beach and open cells remain natural for now.
+
+Roads use a shared terrain profile sampled every 32 blocks, with softened shoulders, shallow cuts, short passages through steep hills, and raised decks over water or valleys. Building plots are graded to their street frontage, with a short paved approach when the selected structure fits. An unsuitable or missing structure leaves its cell natural, without an isolated fenced terrace. Each building still fits within one chunk. The planner currently resolves streets at 16-block cell scale; larger plots, waterfront details, coherent gates and intercity roads are future work. Extreme terrain and in-game results still need review in a newly generated world.
 
 ## Test structure set
 
@@ -47,14 +49,14 @@ Put structure-block NBT files in `data/<namespace>/structure/<path>.nbt` (for in
 
 `dimensions` must match the NBT size. `footprint` describes its occupied area within those dimensions. Current automatic placement accepts buildings no larger than 12 × 12 blocks, including after rotation. `front` is the entrance-facing direction in the unrotated template. `weight` controls selection within a category. The catalog retains `size` and `tags` for future plot rules. Only the `single` type is implemented; `composite` and `jigsaw` are reserved. Definitions can be added or overridden by datapacks and reload with `/reload`.
 
-An operator can find the nearest city candidate on suitable land with `/citygen locate`, check loaded definitions with `/citygen list`, and place a specific one at their position with `/citygen place lasthopecitygen:residential/small/ruined_house`. Cities appear only while new chunks generate. Rejected candidates are skipped rather than shifted within their region, so this land requirement lowers overall city frequency. Manual placement ignores plot/terrain checks and changes blocks in the world.
+An operator can find the nearest city candidate on suitable land with `/citygen locate`, check loaded definitions with `/citygen list`, and place a specific one at their position with `/citygen place lasthopecitygen:residential/small/ruined_house`. Cities appear only while new chunks generate. Rejected candidates are skipped rather than shifted within their region, so the land requirement lowers overall city frequency. Manual placement ignores plot/terrain checks and changes blocks in the world.
 
 ## Development
 
 Run `./gradlew build` with JDK 21 and network access for the NeoForge dependencies. The isolated planning check can be run with any recent JDK:
 
 ```sh
-javac -d /tmp/citygen-plan src/main/java/com/littleemptydoll/lasthopecitygen/worldgen/CityPlan.java src/test/java/com/littleemptydoll/lasthopecitygen/worldgen/CityPlanCheck.java
+javac -d /tmp/citygen-plan src/main/java/com/littleemptydoll/lasthopecitygen/worldgen/CityPlan.java src/main/java/com/littleemptydoll/lasthopecitygen/worldgen/CityLayout.java src/test/java/com/littleemptydoll/lasthopecitygen/worldgen/CityPlanCheck.java
 java -ea -cp /tmp/citygen-plan com.littleemptydoll.lasthopecitygen.worldgen.CityPlanCheck
 ```
 

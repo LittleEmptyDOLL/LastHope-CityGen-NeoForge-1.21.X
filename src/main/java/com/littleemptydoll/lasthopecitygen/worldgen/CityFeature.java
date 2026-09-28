@@ -41,25 +41,30 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
         WorldGenLevel level = context.level();
         int cx = Math.floorDiv(context.origin().getX(), 16);
         int cz = Math.floorDiv(context.origin().getZ(), 16);
-        CityPlan.Cell cell = CityPlan.at(level.getSeed(), cx, cz);
-        if (cell.kind() == CityPlan.Kind.OUTSIDE || cell.kind() == CityPlan.Kind.PARK) return false;
-        CityPlan.CityCenter center = CityPlan.centerForRegion(
-                Math.floorDiv(cx, CityPlan.REGION), Math.floorDiv(cz, CityPlan.REGION));
-        if (!CitySite.isSuitable(context.chunkGenerator(), level,
-                level.getLevel().getChunkSource().randomState(), center.blockX(), center.blockZ())) return false;
+        int rx = Math.floorDiv(cx, CityPlan.REGION), rz = Math.floorDiv(cz, CityPlan.REGION);
+        int x = Math.floorMod(cx, CityPlan.REGION) - CityPlan.OFFSET;
+        int z = Math.floorMod(cz, CityPlan.REGION) - CityPlan.OFFSET;
+        if (x < 0 || z < 0 || x >= CityPlan.SIZE || z >= CityPlan.SIZE
+                || !CityPlan.hasCity(level.getSeed(), rx, rz)) return false;
+        Optional<CityLayout> planned = CitySite.layout(context.chunkGenerator(), level,
+                level.getLevel().getChunkSource().randomState(), level.getSeed(), rx, rz);
+        if (planned.isEmpty()) return false;
+        CityLayout layout = planned.get();
+        CityPlan.Cell cell = layout.cell(x, z);
+        if (cell.kind() == CityPlan.Kind.PARK) return false;
         int minX = cx * 16, minZ = cz * 16;
         RoadProfile profile = new RoadProfile(level, context.chunkGenerator(), cx, cz);
         if (cell.kind() == CityPlan.Kind.LOT) return placeLot(level, profile, minX, minZ, cell);
-        return placeRoad(level, profile, minX, minZ, cx, cz, cell);
+        return placeRoad(level, profile, minX, minZ, layout, x, z, cell);
     }
 
     private static boolean placeRoad(WorldGenLevel level, RoadProfile profile, int minX, int minZ,
-                                     int cx, int cz, CityPlan.Cell cell) {
+                                     CityLayout layout, int cx, int cz, CityPlan.Cell cell) {
         int access = 0;
-        CityPlan.Cell north = CityPlan.at(level.getSeed(), cx, cz - 1);
-        CityPlan.Cell east = CityPlan.at(level.getSeed(), cx + 1, cz);
-        CityPlan.Cell south = CityPlan.at(level.getSeed(), cx, cz + 1);
-        CityPlan.Cell west = CityPlan.at(level.getSeed(), cx - 1, cz);
+        CityPlan.Cell north = layout.cell(cx, cz - 1);
+        CityPlan.Cell east = layout.cell(cx + 1, cz);
+        CityPlan.Cell south = layout.cell(cx, cz + 1);
+        CityPlan.Cell west = layout.cell(cx - 1, cz);
         if (north.kind() == CityPlan.Kind.LOT && north.front() == CityPlan.Front.SOUTH) access |= CityPlan.NORTH;
         if (east.kind() == CityPlan.Kind.LOT && east.front() == CityPlan.Front.WEST) access |= CityPlan.EAST;
         if (south.kind() == CityPlan.Kind.LOT && south.front() == CityPlan.Front.NORTH) access |= CityPlan.SOUTH;
@@ -78,6 +83,8 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
             if (!paved(roads, access, dx, dz)) continue;
             int x = minX + dx, z = minZ + dz;
             BlockState surface = arms(roads, dx, dz, LANE_HALF_WIDTH)
+                    && layout.roadClass(cx, cz) != CityLayout.RoadClass.WATERFRONT
+                    && layout.roadClass(cx, cz) != CityLayout.RoadClass.BRIDGE
                     ? Blocks.GRAY_CONCRETE.defaultBlockState() : Blocks.STONE_BRICKS.defaultBlockState();
             TerrainWorks.grade(level, x, z, profile.surfaceY(x, z) - 1,
                     surface, 4, Blocks.STONE.defaultBlockState());
@@ -116,9 +123,7 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
         ResourceLocation category = ResourceLocation.fromNamespaceAndPath(LastHopeCityGen.MOD_ID,
                 cell.district().name().toLowerCase(Locale.ROOT));
         Optional<StructureDefinition> selected = StructureCatalog.INSTANCE.choose(category, 12, 12, cell.lotSeed());
-        if (selected.isPresent() && placeBuilding(level, profile, minX, minZ, cell, selected.get()))
-            return true;
-        return placeVacantLot(level, profile, minX, minZ, cell.front());
+        return selected.isPresent() && placeBuilding(level, profile, minX, minZ, cell, selected.get());
     }
 
     private static boolean placeBuilding(WorldGenLevel level, RoadProfile profile, int minX, int minZ,
@@ -177,46 +182,6 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
                 minX + 15, level.getMaxBuildHeight() - 1, minZ + 15);
         return SingleStructureBuilder.INSTANCE.build(level, StructurePlacement.at(definition, origin, rotation),
                 chunkBounds, RandomSource.create(cell.lotSeed()));
-    }
-
-    /** Every planned frontage ends at a small terrace even if a building cannot fit. */
-    private static boolean placeVacantLot(WorldGenLevel level, RoadProfile profile, int minX, int minZ,
-                                          CityPlan.Front front) {
-        int edgeX = front == CityPlan.Front.WEST ? minX : front == CityPlan.Front.EAST ? minX + 15 : minX + 8;
-        int edgeZ = front == CityPlan.Front.NORTH ? minZ : front == CityPlan.Front.SOUTH ? minZ + 15 : minZ + 8;
-        int groundY = profile.surfaceY(edgeX, edgeZ) - 1;
-        if (!TerrainWorks.fitsHeight(level, groundY, 4)) return false;
-        for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++) {
-            int cross = terraceCross(front, dx, dz);
-            int inward = terraceInward(front, dx, dz);
-            int distance = Math.max(6 - cross, Math.max(cross - 9, 0)) + Math.max(inward - 5, 0);
-            if (distance > 0 && distance <= 2)
-                TerrainWorks.shoulder(level, minX + dx, minZ + dz, groundY, distance, 3);
-        }
-        for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++) {
-            int cross = terraceCross(front, dx, dz);
-            int inward = terraceInward(front, dx, dz);
-            if (cross < 6 || cross > 9 || inward > 5) continue;
-            TerrainWorks.grade(level, minX + dx, minZ + dz, groundY,
-                    Blocks.STONE_BRICKS.defaultBlockState(), 4, Blocks.STONE.defaultBlockState());
-            if (inward == 5 || inward >= 2 && (cross == 6 || cross == 9))
-                level.setBlock(new BlockPos(minX + dx, groundY + 1, minZ + dz),
-                        Blocks.STONE_BRICK_WALL.defaultBlockState(), 2);
-        }
-        return true;
-    }
-
-    private static int terraceCross(CityPlan.Front front, int dx, int dz) {
-        return front == CityPlan.Front.NORTH || front == CityPlan.Front.SOUTH ? dx : dz;
-    }
-
-    private static int terraceInward(CityPlan.Front front, int dx, int dz) {
-        return switch (front) {
-            case NORTH -> dz;
-            case EAST -> 15 - dx;
-            case SOUTH -> 15 - dz;
-            case WEST -> dx;
-        };
     }
 
     private static List<BlockPos> approach(int minX, int minZ, CityPlan.Front front,
