@@ -4,9 +4,9 @@ NeoForge 1.21.1 generator for small, deterministic abandoned city blocks.
 
 ## Current generation
 
-The Overworld is divided into 32 × 32 chunk regions. Each region has a one-in-six seed-dependent chance of containing an 8 × 8 chunk city, centered in that region. The city has two north–south and two east–west streets, with intersections and lots between them. Plans are pure functions of the world seed and chunk coordinates; visiting chunks in a different order does not change the plan. Roads, pavements and shallow supports are made in code. The current sample residential building is a small NBT template. Industrial and civic lots remain vacant until templates are supplied.
+The Overworld is divided into 32 × 32 chunk regions. Each region has a one-in-six seed-dependent chance of containing an 8 × 8 chunk city, centered in that region. Its connected street grid has straight sections, crossroads, T junctions, corners and short optional spurs. Lots are built only when they touch a road; other cells remain open. Plans are pure functions of the world seed and chunk coordinates, independent of the order in which chunks generate. The current sample residential building is a small NBT template. Industrial and civic lots remain vacant until templates are supplied.
 
-Cities currently follow terrain and are intentionally limited to individual chunks for buildings. Rough or flooded lots remain empty. Roads are not yet leveled across steep slopes; generation is intended for reasonably flat terrain. No roads link separate cities yet.
+Roads use a terrain profile sampled every 32 blocks and smoothed between those points, with cut and fill for their pavement. Building plots are leveled to their street frontage, and a short paved approach joins the building to the neighboring road chunk. Each building still fits within one chunk. Cells on water or requiring more than ten blocks of cut or fill remain empty, so very rough terrain can interrupt streets. No roads link separate cities yet.
 
 ## Adding buildings
 
