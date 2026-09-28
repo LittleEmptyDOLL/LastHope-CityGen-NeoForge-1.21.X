@@ -196,3 +196,8 @@ tasks.register('checkCityPlan', JavaExec) {
     mainClass = 'com.littleemptydoll.lasthopecitygen.worldgen.CityPlanCheck'
     jvmArgs '-ea'
 }
+
+// CityPlanCheck is executed by checkCityPlan, not by a JUnit engine.
+tasks.named('test', Test) {
+    failOnNoDiscoveredTests = false
+}
