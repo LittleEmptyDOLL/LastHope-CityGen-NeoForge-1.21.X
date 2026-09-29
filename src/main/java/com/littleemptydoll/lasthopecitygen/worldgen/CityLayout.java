@@ -31,7 +31,7 @@ public final class CityLayout {
     private static final int[] DX = {0, 1, 0, -1};
     private static final int[] DZ = {-1, 0, 1, 0};
     private static final int[] BIT = {CityPlan.NORTH, CityPlan.EAST, CityPlan.SOUTH, CityPlan.WEST};
-    private static final int MAX_ROAD_CELLS = 34;
+    private static final int MAX_ROAD_CELLS = 22;
     private static final CityPlan.Cell OUTSIDE = new CityPlan.Cell(CityPlan.Kind.OUTSIDE,
             CityPlan.District.RESIDENTIAL, CityPlan.Front.NORTH, 0, 0);
 
@@ -89,7 +89,7 @@ public final class CityLayout {
         }
         // A coast or narrow river is useful, a small island in open sea is not.
         if (dry < 34 || central < 9) return Optional.empty();
-        Builder builder = new Builder(seed, regionX, regionZ, terrain);
+        Builder builder = new Builder(seed, regionX, regionZ, terrain, dry);
         builder.grow();
         builder.rationalize();
         if (builder.count < 5) return Optional.empty();
@@ -196,14 +196,18 @@ public final class CityLayout {
         private final PriorityQueue<Proposal> queue = new PriorityQueue<>(Comparator
                 .comparingInt(Proposal::priority).reversed().thenComparingLong(Proposal::tie));
         private final int majorAxis;
+        private final int roadBudget;
         private int count;
 
-        Builder(long seed, int regionX, int regionZ, Terrain terrain) {
+        Builder(long seed, int regionX, int regionZ, Terrain terrain, int dryCells) {
             this.seed = CityPlan.mix(seed ^ ((long) regionX * 0xD6E8FEB86659FD93L)
                     ^ ((long) regionZ * 0xA5A3564E27F8862DL));
             this.regionX = regionX;
             this.regionZ = regionZ;
             this.terrain = terrain;
+            // Keep room for blocks even in a city with a river or coastline.
+            this.roadBudget = Math.min(MAX_ROAD_CELLS, dryCells * 2 / 5)
+                    - (int) (this.seed & 3);
             int wetX = 0, wetZ = 0;
             for (int x = 0; x < CityPlan.SIZE; x++) for (int z = 0; z < CityPlan.SIZE; z++)
                 if (terrain.water[x][z]) { wetX += x * 2 - 7; wetZ += z * 2 - 7; }
@@ -228,7 +232,7 @@ public final class CityLayout {
             enqueue(startX, startZ, (forward + 1) & 3, 4, 1, RoadClass.SECONDARY);
             enqueue(startX, startZ, (forward + 3) & 3, 4, 1, RoadClass.SECONDARY);
             int attempts = 0;
-            while (!queue.isEmpty() && attempts++ < 180 && count < MAX_ROAD_CELLS) {
+            while (!queue.isEmpty() && attempts++ < 180 && count < roadBudget) {
                 Proposal proposal = queue.remove();
                 if (proposal.budget == 0 || !road[proposal.x][proposal.z]) continue;
                 advance(proposal);
@@ -246,6 +250,7 @@ public final class CityLayout {
                 int waterRun = waterRun(nx, nz, direction);
                 if (waterRun < 0) continue;
                 if (waterRun > 0 && !clearBridge(nx, nz, direction, waterRun)) continue;
+                if (!hasSpace(proposal.x, proposal.z, direction, waterRun)) continue;
                 int landingX = nx + DX[direction] * waterRun;
                 int landingZ = nz + DZ[direction] * waterRun;
                 int elevation = Math.abs(terrain.height[proposal.x][proposal.z]
@@ -273,7 +278,7 @@ public final class CityLayout {
             if (existing) return;
             if (proposal.budget > 1) enqueue(x, z, direction, proposal.budget - 1,
                     proposal.depth, proposal.roadClass);
-            if (proposal.depth < 2 && proposal.budget > 2 && count < MAX_ROAD_CELLS - 3
+            if (proposal.depth < 2 && proposal.budget > 2 && count < roadBudget - 3
                     && (hash(x, z, direction) & 3) <= (proposal.roadClass == RoadClass.PRIMARY ? 2 : 1)) {
                 int side = (hash(x, z, 7) & 1) == 0 ? 1 : 3;
                 enqueue(x, z, (direction + side) & 3, 2 + (int) (hash(x, z, 4) & 3),
@@ -300,6 +305,31 @@ public final class CityLayout {
                     if (side == direction || side == ((direction + 2) & 3)) continue;
                     int nx = bx + DX[side], nz = bz + DZ[side];
                     if (inside(nx, nz) && road[nx][nz]) return false;
+                }
+            }
+            return true;
+        }
+
+        private boolean hasSpace(int x, int z, int direction, int waterRun) {
+            int added = 0;
+            for (int step = 0; step <= waterRun; step++) {
+                int nx = x + DX[direction] * (step + 1);
+                int nz = z + DZ[direction] * (step + 1);
+                if (road[nx][nz]) continue;
+                if (++added + count > roadBudget) return false;
+                // A paved 2x2 square is the start of the solid 2x4 patches.
+                // Check all cells proposed by this bridge, not only the landing.
+                for (int ax = nx - 1; ax <= nx; ax++) for (int az = nz - 1; az <= nz; az++) {
+                    if (!inside(ax, az) || !inside(ax + 1, az + 1)) continue;
+                    boolean full = true;
+                    for (int px = ax; px <= ax + 1; px++) for (int pz = az; pz <= az + 1; pz++) {
+                        boolean onProposal = false;
+                        for (int k = 0; k <= step; k++)
+                            if (px == x + DX[direction] * (k + 1)
+                                    && pz == z + DZ[direction] * (k + 1)) onProposal = true;
+                        full &= road[px][pz] || onProposal;
+                    }
+                    if (full) return false;
                 }
             }
             return true;
@@ -357,9 +387,11 @@ public final class CityLayout {
         }
 
         void rationalize() {
-            // Lattice nodes cannot cross between intersections; masks remove
-            // duplicate segments. Trim dead ends with no prospective frontage.
-            for (int pass = 0; pass < 2; pass++) {
+            // Prune all terminal segments without dry frontage, including chains
+            // exposed by removing another dead end in the previous pass.
+            boolean changed;
+            do {
+                changed = false;
                 for (int x = 0; x < CityPlan.SIZE; x++) for (int z = 0; z < CityPlan.SIZE; z++) {
                     if (!road[x][z] || Integer.bitCount(links[x][z]) != 1) continue;
                     int nearbyDry = 0;
@@ -370,8 +402,9 @@ public final class CityLayout {
                     int nx = x + DX[direction], nz = z + DZ[direction];
                     links[nx][nz] &= ~BIT[(direction + 2) & 3];
                     links[x][z] = 0; road[x][z] = false; classes[x][z] = null; count--;
+                    changed = true;
                 }
-            }
+            } while (changed);
         }
 
         void markWaterfront() {
