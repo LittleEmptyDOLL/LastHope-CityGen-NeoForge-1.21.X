@@ -14,6 +14,9 @@ import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.feature.Feature;
 import net.minecraft.world.level.levelgen.feature.FeaturePlaceContext;
 import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration;
@@ -61,7 +64,22 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
         if (layout.plotUse(x, z) == CityLayout.PlotUse.WATERFRONT)
             return placeQuay(level, profile, minX, minZ,
                     ShoreGeometry.openWaterMask(layout, x, z), 1 << cell.front().ordinal());
-        if (cell.kind() == CityPlan.Kind.LOT) return placeLot(level, profile, minX, minZ, cell);
+        if (cell.kind() == CityPlan.Kind.LOT) {
+            CityLayout.LargePlot plot = layout.largePlotAt(x, z);
+            if (plot != null) {
+                ResourceLocation category = category(plot.district());
+                Optional<StructureDefinition> larger = StructureCatalog.INSTANCE.chooseLarge(category,
+                        plot.widthCells() * 16 - 4, plot.depthCells() * 16 - 4,
+                        plot.front() == CityPlan.Front.NORTH || plot.front() == CityPlan.Front.SOUTH, plot.seed());
+                if (larger.isPresent()) {
+                    Optional<LargePlacement> placement = prepareLarge(level, context.chunkGenerator(), profile,
+                            rx, rz, plot, larger.get());
+                    if (placement.isPresent())
+                        return placeLargePiece(level, minX, minZ, plot, placement.get());
+                }
+            }
+            return placeLot(level, profile, minX, minZ, cell);
+        }
         return placeRoad(level, profile, minX, minZ, layout, x, z, cell);
     }
 
@@ -186,10 +204,90 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
 
     private static boolean placeLot(WorldGenLevel level, RoadProfile profile, int minX, int minZ,
                                     CityPlan.Cell cell) {
-        ResourceLocation category = ResourceLocation.fromNamespaceAndPath(LastHopeCityGen.MOD_ID,
-                cell.district().name().toLowerCase(Locale.ROOT));
-        Optional<StructureDefinition> selected = StructureCatalog.INSTANCE.choose(category, 12, 12, cell.lotSeed());
+        Optional<StructureDefinition> selected = StructureCatalog.INSTANCE.choose(
+                category(cell.district()), 12, 12, cell.lotSeed());
         return selected.isPresent() && placeBuilding(level, profile, minX, minZ, cell, selected.get());
+    }
+
+    private static ResourceLocation category(CityPlan.District district) {
+        return ResourceLocation.fromNamespaceAndPath(LastHopeCityGen.MOD_ID,
+                district.name().toLowerCase(Locale.ROOT));
+    }
+
+    private record LargePlacement(StructureDefinition definition, Rotation rotation,
+                                  int originX, int originZ, int groundY, int plotMinX, int plotMinZ,
+                                  int width, int depth) { }
+
+    private static Optional<LargePlacement> prepareLarge(WorldGenLevel level, ChunkGenerator generator,
+                                                          RoadProfile profile, int regionX, int regionZ,
+                                                          CityLayout.LargePlot plot, StructureDefinition definition) {
+        Optional<StructureTemplate> found = level.getLevel().getStructureManager().get(definition.singleSource().template());
+        if (found.isEmpty()) return Optional.empty();
+        StructureTemplate template = found.get();
+        if (template.getSize().getX() != definition.dimensions().width()
+                || template.getSize().getY() != definition.dimensions().height()
+                || template.getSize().getZ() != definition.dimensions().depth()) return Optional.empty();
+        int width = plot.widthCells() * 16, depth = plot.depthCells() * 16;
+        int plotMinX = (regionX * CityPlan.REGION + CityPlan.OFFSET + plot.x()) * 16;
+        int plotMinZ = (regionZ * CityPlan.REGION + CityPlan.OFFSET + plot.z()) * 16;
+        Rotation rotation = rotation(definition.front(), plot.front());
+        BoundingBox bounds = template.getBoundingBox(new StructurePlaceSettings().setRotation(rotation), BlockPos.ZERO);
+        int rotatedWidth = bounds.maxX() - bounds.minX() + 1;
+        int rotatedDepth = bounds.maxZ() - bounds.minZ() + 1;
+        if (rotatedWidth > width - 4 || rotatedDepth > depth - 4) return Optional.empty();
+        int edgeX = plotMinX + (plot.front() == CityPlan.Front.WEST ? 0
+                : plot.front() == CityPlan.Front.EAST ? width - 1 : width / 2);
+        int edgeZ = plotMinZ + (plot.front() == CityPlan.Front.NORTH ? 0
+                : plot.front() == CityPlan.Front.SOUTH ? depth - 1 : depth / 2);
+        int groundY = profile.surfaceY(edgeX, edgeZ) - 1;
+        if (!TerrainWorks.fitsHeight(level, groundY, template.getSize().getY() + 2)) return Optional.empty();
+        RandomState randomState = level.getLevel().getChunkSource().randomState();
+        // This decision uses only the unmodified generator for the whole plot.
+        // Both chunk invocations therefore either place their piece or fall back.
+        for (int x = plotMinX; x < plotMinX + width; x++) for (int z = plotMinZ; z < plotMinZ + depth; z++) {
+            int surface = generator.getBaseHeight(x, z, Heightmap.Types.WORLD_SURFACE_WG, level, randomState);
+            int floor = generator.getBaseHeight(x, z, Heightmap.Types.OCEAN_FLOOR_WG, level, randomState);
+            if (surface > floor || Math.abs(surface - 1 - groundY) > TerrainWorks.MAX_LOT_EARTHWORK)
+                return Optional.empty();
+        }
+        int originX = plotMinX + (width - rotatedWidth) / 2 - bounds.minX();
+        int originZ = plotMinZ + (depth - rotatedDepth) / 2 - bounds.minZ();
+        return Optional.of(new LargePlacement(definition, rotation, originX, originZ,
+                groundY, plotMinX, plotMinZ, width, depth));
+    }
+
+    private static boolean placeLargePiece(WorldGenLevel level, int minX, int minZ,
+                                           CityLayout.LargePlot plot, LargePlacement placement) {
+        int groundY = placement.groundY();
+        int minPlotX = placement.plotMinX(), minPlotZ = placement.plotMinZ();
+        for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++) {
+            int x = minX + dx, z = minZ + dz;
+            int px = x - minPlotX, pz = z - minPlotZ;
+            int distance = Math.max(Math.max(2 - px, px - (placement.width() - 3)),
+                    Math.max(2 - pz, pz - (placement.depth() - 3)));
+            if (distance > 0 && distance <= 2)
+                TerrainWorks.shoulder(level, x, z, groundY, distance, 3);
+        }
+        for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++) {
+            int x = minX + dx, z = minZ + dz;
+            int px = x - minPlotX, pz = z - minPlotZ;
+            boolean pad = px >= 2 && px < placement.width() - 2
+                    && pz >= 2 && pz < placement.depth() - 2;
+            boolean frontage = switch (plot.front()) {
+                case NORTH -> pz < 2 && px >= 2 && px < placement.width() - 2;
+                case SOUTH -> pz >= placement.depth() - 2 && px >= 2 && px < placement.width() - 2;
+                case WEST -> px < 2 && pz >= 2 && pz < placement.depth() - 2;
+                case EAST -> px >= placement.width() - 2 && pz >= 2 && pz < placement.depth() - 2;
+            };
+            if (pad || frontage)
+                TerrainWorks.grade(level, x, z, groundY, Blocks.STONE_BRICKS.defaultBlockState(),
+                        placement.definition().dimensions().height() + 2, Blocks.STONE.defaultBlockState());
+        }
+        BlockPos origin = new BlockPos(placement.originX(), groundY + 1, placement.originZ());
+        BoundingBox chunkBounds = new BoundingBox(minX, level.getMinBuildHeight(), minZ,
+                minX + 15, level.getMaxBuildHeight() - 1, minZ + 15);
+        return SingleStructureBuilder.INSTANCE.build(level, StructurePlacement.at(placement.definition(),
+                origin, placement.rotation()), chunkBounds, RandomSource.create(plot.seed()));
     }
 
     private static boolean placeBuilding(WorldGenLevel level, RoadProfile profile, int minX, int minZ,

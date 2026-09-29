@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the small, intentionally simple NBT fixtures used to exercise city lots.
+"""Build the intentionally simple NBT fixtures used to exercise city lots.
 
 Run this file to regenerate the checked-in resources, or pass --check to compare
 the byte-for-byte output without changing anything. Python 3, no dependencies.
@@ -32,10 +32,9 @@ class Building:
     weight: int
     tags: tuple[str, ...]
     style: str
+    size: str = "small"
 
 
-# All fixtures fit the current single-chunk 12x12 lot. Larger landmarks need
-# multi-chunk planning and are deliberately outside this test set.
 BUILDINGS = (
     Building("abandoned_cabin", "residential", 7, 7, 5, 8,
              ("house", "wooden", "ruined"), "cabin"),
@@ -43,6 +42,8 @@ BUILDINGS = (
              ("house", "urban", "ruined"), "row_house"),
     Building("apartment", "residential", 11, 11, 9, 3,
              ("apartments", "urban", "ruined"), "apartment"),
+    Building("apartment_block", "residential", 22, 12, 9, 2,
+             ("apartments", "medium", "ruined"), "apartment", "medium"),
     Building("workshop", "industrial", 9, 8, 6, 8,
              ("workshop", "industrial", "ruined"), "workshop"),
     Building("warehouse", "industrial", 12, 10, 7, 6,
@@ -236,11 +237,10 @@ def nbt(building: Building) -> bytes:
 
 
 def definition(building: Building) -> bytes:
-    size = "small"  # The current generator has only one 12x12 plot size.
     payload = {
         "type": "single",
         "category": f"{NAMESPACE}:{building.district}",
-        "size": size,
+        "size": building.size,
         "dimensions": {"width": building.width, "depth": building.depth, "height": building.height},
         "footprint": {"offset_x": 0, "offset_z": 0,
                       "width": building.width, "depth": building.depth},
@@ -258,11 +258,14 @@ def main() -> None:
     args = parser.parse_args()
     count = 0
     for building in BUILDINGS:
-        if max(building.width, building.depth) > 12:
-            raise ValueError(f"{building.name} exceeds the current lot")
+        if building.size == "small" and max(building.width, building.depth) > 12:
+            raise ValueError(f"{building.name} exceeds a small lot")
+        if building.size == "medium" and (building.width > 28 or building.depth > 28
+                                           or min(building.width, building.depth) > 12):
+            raise ValueError(f"{building.name} exceeds a two-chunk plot")
         files = {
             DATA / "structure/city" / building.district / f"{building.name}.nbt": nbt(building),
-            DATA / "citygen/structures" / building.district / "small" / f"{building.name}.json": definition(building),
+            DATA / "citygen/structures" / building.district / building.size / f"{building.name}.json": definition(building),
         }
         for path, content in files.items():
             if args.check:

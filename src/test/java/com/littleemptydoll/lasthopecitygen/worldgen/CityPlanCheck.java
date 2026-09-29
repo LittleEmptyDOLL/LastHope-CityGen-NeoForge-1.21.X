@@ -20,15 +20,19 @@ public final class CityPlanCheck {
 
         CityLayout.Terrain flat = terrain(64);
         Set<String> shapes = new HashSet<>();
+        int largePlots = 0;
         for (int rx = -3; rx <= 3; rx++) for (int rz = -3; rz <= 3; rz++) {
             if (!CityPlan.hasCity(seed, rx, rz)) continue;
             CityLayout layout = CityLayout.plan(seed, rx, rz, flat).orElseThrow();
             verify(layout, flat);
             String signature = signature(layout);
             assert signature.equals(signature(CityLayout.plan(seed, rx, rz, flat).orElseThrow()));
+            assert layout.largePlots().equals(CityLayout.plan(seed, rx, rz, flat).orElseThrow().largePlots());
+            largePlots += layout.largePlots().size();
             shapes.add(signature);
         }
         assert shapes.size() >= 2 : "Every city has the same road pattern";
+        assert largePlots > 0 : "No two-chunk plots on level terrain";
 
         CityLayout.Terrain coast = terrain(64);
         for (int x = 6; x < 8; x++) for (int z = 0; z < 8; z++) coast.water()[x][z] = true;
@@ -188,6 +192,27 @@ public final class CityPlanCheck {
         assert reached == roads : "Disconnected streets";
         assert roads == layout.roadCount() && roads >= 5;
         assert layout.blocks().stream().mapToInt(CityLayout.CityBlock::cells).sum() == blockCells;
+        int reserved = 0;
+        for (CityLayout.LargePlot plot : layout.largePlots()) {
+            assert plot.widthCells() + plot.depthCells() == 3;
+            int id = layout.blockId(plot.x(), plot.z());
+            for (int x = plot.x(); x < plot.x() + plot.widthCells(); x++)
+                for (int z = plot.z(); z < plot.z() + plot.depthCells(); z++) {
+                    assert layout.largePlotAt(x, z) == plot;
+                    assert layout.blockId(x, z) == id && id > 0;
+                    assert layout.plotUse(x, z) == CityLayout.PlotUse.BUILDING;
+                    assert layout.cell(x, z).district() == plot.district();
+                    assert layout.cell(x, z).front() == plot.front();
+                    int side = plot.front().ordinal();
+                    assert layout.cell(x + DX[side], z + DZ[side]).isRoad();
+                    assert Math.abs(terrain.height()[x][z] - terrain.height()[plot.x()][plot.z()]) <= 4;
+                    reserved++;
+                }
+        }
+        int seen = 0;
+        for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++)
+            if (layout.largePlotAt(x, z) != null) seen++;
+        assert seen == reserved;
         assert layout.cell(-1, 0).kind() == CityPlan.Kind.OUTSIDE;
         assert lots > 0;
     }

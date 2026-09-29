@@ -78,10 +78,16 @@ def check(path: Path) -> None:
     width, height, depth = root["size"]
     assert (width, height, depth) == tuple(definition["dimensions"][key]
                                           for key in ("width", "height", "depth")), path
-    assert width <= 12 and depth <= 12 and height > 0, path
+    assert height > 0, path
     assert definition["category"] == f"{NAMESPACE}:{path.parent.parent.name}", path
     assert definition["front"] == "north" and definition["weight"] > 0, path
-    assert definition["type"] == "single" and definition["size"] == "small", path
+    assert definition["type"] == "single" and definition["size"] == path.parent.name, path
+    if definition["size"] == "small":
+        assert width <= 12 and depth <= 12, path
+    elif definition["size"] == "medium":
+        assert 12 < max(width, depth) <= 28 and min(width, depth) <= 12, path
+    else:
+        raise AssertionError(path)
     footprint = definition["footprint"]
     assert 0 <= footprint["offset_x"] and 0 <= footprint["offset_z"], path
     assert 0 < footprint["width"] <= width - footprint["offset_x"], path
@@ -100,7 +106,7 @@ def check(path: Path) -> None:
 
 def main() -> None:
     definitions = sorted((DATA / NAMESPACE / "citygen/structures").rglob("*.json"))
-    assert len(definitions) == 10, f"Expected ten test structures, got {len(definitions)}"
+    assert len(definitions) == 11, f"Expected eleven test structures, got {len(definitions)}"
     for path in definitions:
         check(path)
     print(f"Validated {len(definitions)} structure definitions and NBT templates")

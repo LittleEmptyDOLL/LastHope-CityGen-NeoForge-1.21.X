@@ -12,6 +12,9 @@ public final class CityLayout {
     public enum RoadClass { PRIMARY, SECONDARY, WATERFRONT, BRIDGE }
     public enum PlotUse { BUILDING, PARK, EMPTY, BEACH, WATERFRONT, INFRASTRUCTURE }
     public record CityBlock(int id, int cells, boolean touchesBoundary, boolean touchesWater) { }
+    /** A pair of adjacent 16-block cells with a shared street frontage. */
+    public record LargePlot(int x, int z, int widthCells, int depthCells, CityPlan.Front front,
+                            CityPlan.District district, long seed) { }
 
     public record Terrain(int[][] height, boolean[][] water, int seaLevel) {
         public Terrain {
@@ -37,7 +40,9 @@ public final class CityLayout {
     private final PlotUse[][] plotUses = new PlotUse[CityPlan.SIZE][CityPlan.SIZE];
     private final boolean[][] water = new boolean[CityPlan.SIZE][CityPlan.SIZE];
     private final int[][] blockIds = new int[CityPlan.SIZE][CityPlan.SIZE];
+    private final LargePlot[][] plotsByCell = new LargePlot[CityPlan.SIZE][CityPlan.SIZE];
     private final List<CityBlock> blocks;
+    private final List<LargePlot> largePlots;
     private final int roadCount;
 
     private CityLayout(Builder builder) {
@@ -71,6 +76,7 @@ public final class CityLayout {
         }
         roadCount = count;
         blocks = List.copyOf(extractBlocks(builder));
+        largePlots = List.copyOf(selectLargePlots(builder));
     }
 
     public static Optional<CityLayout> plan(long seed, int regionX, int regionZ, Terrain terrain) {
@@ -97,6 +103,8 @@ public final class CityLayout {
     public boolean isWater(int x, int z) { return inside(x, z) && water[x][z]; }
     public int blockId(int x, int z) { return inside(x, z) ? blockIds[x][z] : -1; }
     public List<CityBlock> blocks() { return blocks; }
+    public List<LargePlot> largePlots() { return largePlots; }
+    public LargePlot largePlotAt(int x, int z) { return inside(x, z) ? plotsByCell[x][z] : null; }
     public int roadCount() { return roadCount; }
 
     private List<CityBlock> extractBlocks(Builder builder) {
@@ -126,6 +134,49 @@ public final class CityLayout {
             result.add(new CityBlock(id, size, boundary, water));
         }
         return result;
+    }
+
+    private record Pair(int x, int z, int dx, int dz, CityPlan.Front front, long priority) { }
+
+    private List<LargePlot> selectLargePlots(Builder builder) {
+        List<Pair> candidates = new ArrayList<>();
+        for (int x = 0; x < CityPlan.SIZE; x++) for (int z = 0; z < CityPlan.SIZE; z++) {
+            for (int axis = 0; axis < 2; axis++) {
+                int dx = axis == 0 ? 1 : 0, dz = axis == 0 ? 0 : 1;
+                int nx = x + dx, nz = z + dz;
+                if (!inside(nx, nz) || plotUses[x][z] != PlotUse.BUILDING
+                        || plotUses[nx][nz] != PlotUse.BUILDING
+                        || blockIds[x][z] == 0 || blockIds[x][z] != blockIds[nx][nz]
+                        || cells[x][z].district() != cells[nx][nz].district()
+                        || Math.abs(builder.terrain.height[x][z] - builder.terrain.height[nx][nz]) > 4) continue;
+                int[] sides = axis == 0 ? new int[] {0, 2} : new int[] {1, 3};
+                for (int side : sides) {
+                    int ax = x + DX[side], az = z + DZ[side];
+                    int bx = nx + DX[side], bz = nz + DZ[side];
+                    if (!inside(ax, az) || !inside(bx, bz)
+                            || !cells[ax][az].isRoad() || !cells[bx][bz].isRoad()) continue;
+                    long priority = CityPlan.mix(cells[x][z].lotSeed() ^ cells[nx][nz].lotSeed()
+                            ^ (long) side * 0x9E3779B97F4A7C15L);
+                    candidates.add(new Pair(x, z, dx, dz, CityPlan.Front.values()[side], priority));
+                }
+            }
+        }
+        candidates.sort((a, b) -> Long.compareUnsigned(a.priority(), b.priority()));
+        List<LargePlot> chosen = new ArrayList<>();
+        for (Pair pair : candidates) {
+            if (chosen.size() == 2) break;
+            int x = pair.x(), z = pair.z(), nx = x + pair.dx(), nz = z + pair.dz();
+            if (plotsByCell[x][z] != null || plotsByCell[nx][nz] != null) continue;
+            LargePlot plot = new LargePlot(x, z, 1 + pair.dx(), 1 + pair.dz(), pair.front(),
+                    cells[x][z].district(), pair.priority());
+            plotsByCell[x][z] = plotsByCell[nx][nz] = plot;
+            cells[x][z] = new CityPlan.Cell(CityPlan.Kind.LOT, plot.district(), plot.front(), 0,
+                    cells[x][z].lotSeed());
+            cells[nx][nz] = new CityPlan.Cell(CityPlan.Kind.LOT, plot.district(), plot.front(), 0,
+                    cells[nx][nz].lotSeed());
+            chosen.add(plot);
+        }
+        return chosen;
     }
 
     private static boolean inside(int x, int z) {
