@@ -42,6 +42,29 @@ public final class CityPlanCheck {
         CityLayout riverside = CityLayout.plan(seed, 2, 0, river).orElseThrow();
         verify(riverside, river);
         assert dryRoads(riverside, river) > 0;
+        for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) {
+            if (!riverside.cell(x, z).isRoad()) continue;
+            int mask = ShoreGeometry.openWaterMask(riverside, x, z);
+            for (int i = 0; i < 4; i++) if ((mask & (1 << i)) != 0)
+                assert !riverside.cell(x + DX[i], z + DZ[i]).isRoad() : "Rail across bridge entrance";
+        }
+
+        CityLayout.Terrain highCoast = terrain(72);
+        for (int z = 0; z < 8; z++) {
+            highCoast.water()[6][z] = highCoast.water()[7][z] = true;
+            highCoast.height()[6][z] = highCoast.height()[7][z] = 64;
+        }
+        CityLayout high = CityLayout.plan(seed, 1, 0, highCoast).orElseThrow();
+        verify(high, highCoast);
+        int waterfront = 0;
+        for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++)
+            if (high.plotUse(x, z) == CityLayout.PlotUse.WATERFRONT) {
+                waterfront++;
+                CityPlan.Front front = high.cell(x, z).front();
+                assert high.cell(x + DX[front.ordinal()], z + DZ[front.ordinal()]).isRoad();
+            }
+        assert waterfront > 0;
+        checkShoreShapes();
 
         CityLayout.Terrain ocean = terrain(63);
         for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) ocean.water()[x][z] = true;
@@ -65,6 +88,39 @@ public final class CityPlanCheck {
         boolean[][] water = new boolean[8][8];
         for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) height[x][z] = y;
         return new CityLayout.Terrain(height, water, 63);
+    }
+
+    private static void checkShoreShapes() {
+        int[] shore = {CityPlan.NORTH, CityPlan.EAST, CityPlan.SOUTH, CityPlan.WEST};
+        int[] opposite = {CityPlan.SOUTH, CityPlan.WEST, CityPlan.NORTH, CityPlan.EAST};
+        int[] edgeX = {8, 15, 8, 0}, edgeZ = {0, 8, 15, 8};
+        for (int i = 0; i < 4; i++) {
+            assert ShoreGeometry.beach(shore[i], edgeX[i], edgeZ[i]);
+            assert ShoreGeometry.rail(shore[i], edgeX[i], edgeZ[i]);
+            assert !ShoreGeometry.rail(shore[i], edgeX[(i + 2) & 3], edgeZ[(i + 2) & 3]);
+            if (i % 2 == 0) {
+                assert ShoreGeometry.rail(shore[i], 0, edgeZ[i]);
+                assert ShoreGeometry.rail(shore[i], 15, edgeZ[i]);
+            } else {
+                assert ShoreGeometry.rail(shore[i], edgeX[i], 0);
+                assert ShoreGeometry.rail(shore[i], edgeX[i], 15);
+            }
+            boolean[][] visited = new boolean[16][16];
+            ArrayDeque<int[]> queue = new ArrayDeque<>();
+            queue.add(new int[] {edgeX[(i + 2) & 3], edgeZ[(i + 2) & 3]});
+            while (!queue.isEmpty()) {
+                int[] p = queue.remove();
+                int x = p[0], z = p[1];
+                if (x < 0 || z < 0 || x >= 16 || z >= 16 || visited[x][z]
+                        || !ShoreGeometry.quay(shore[i], opposite[i], x, z)) continue;
+                visited[x][z] = true;
+                for (int d = 0; d < 4; d++) queue.add(new int[] {x + DX[d], z + DZ[d]});
+            }
+            assert visited[edgeX[i]][edgeZ[i]] : "Promenade does not reach shore";
+            for (int x = 0; x < 16; x++) for (int z = 0; z < 16; z++)
+                assert !ShoreGeometry.quay(shore[i], opposite[i], x, z) || visited[x][z]
+                        : "Disconnected quay paving";
+        }
     }
 
     private static int shorePlots(CityLayout layout) {
