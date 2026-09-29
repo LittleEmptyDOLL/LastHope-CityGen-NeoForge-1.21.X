@@ -35,6 +35,7 @@ public final class CityLayout {
     private final CityPlan.Cell[][] cells = new CityPlan.Cell[CityPlan.SIZE][CityPlan.SIZE];
     private final RoadClass[][] roadClasses = new RoadClass[CityPlan.SIZE][CityPlan.SIZE];
     private final PlotUse[][] plotUses = new PlotUse[CityPlan.SIZE][CityPlan.SIZE];
+    private final boolean[][] water = new boolean[CityPlan.SIZE][CityPlan.SIZE];
     private final int[][] blockIds = new int[CityPlan.SIZE][CityPlan.SIZE];
     private final List<CityBlock> blocks;
     private final int roadCount;
@@ -45,6 +46,7 @@ public final class CityLayout {
             int mask = builder.links[x][z];
             if (builder.road[x][z]) count++;
             roadClasses[x][z] = builder.classes[x][z];
+            water[x][z] = builder.terrain.water[x][z];
             if (builder.road[x][z]) {
                 plotUses[x][z] = PlotUse.INFRASTRUCTURE;
                 int degree = Integer.bitCount(mask);
@@ -92,6 +94,7 @@ public final class CityLayout {
     public CityPlan.Cell cell(int x, int z) { return inside(x, z) ? cells[x][z] : OUTSIDE; }
     public PlotUse plotUse(int x, int z) { return inside(x, z) ? plotUses[x][z] : PlotUse.EMPTY; }
     public RoadClass roadClass(int x, int z) { return inside(x, z) ? roadClasses[x][z] : null; }
+    public boolean isWater(int x, int z) { return inside(x, z) && water[x][z]; }
     public int blockId(int x, int z) { return inside(x, z) ? blockIds[x][z] : -1; }
     public List<CityBlock> blocks() { return blocks; }
     public int roadCount() { return roadCount; }
@@ -354,7 +357,7 @@ public final class CityLayout {
                     relief = Math.max(relief, Math.abs(terrain.height[x][z] - terrain.height[nx][nz]));
             }
             if (shore) return terrain.height[x][z] <= terrain.seaLevel + 3
-                    ? PlotUse.BEACH : PlotUse.WATERFRONT;
+                    ? PlotUse.BEACH : adjacent != 0 && relief <= 5 ? PlotUse.WATERFRONT : PlotUse.PARK;
             if (adjacent == 0) return (hash(x, z, 5) & 3) == 0 ? PlotUse.EMPTY : PlotUse.PARK;
             return relief > 8 ? PlotUse.PARK : PlotUse.BUILDING;
         }

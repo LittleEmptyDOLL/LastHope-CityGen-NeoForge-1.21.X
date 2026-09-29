@@ -51,9 +51,16 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
         if (planned.isEmpty()) return false;
         CityLayout layout = planned.get();
         CityPlan.Cell cell = layout.cell(x, z);
-        if (cell.kind() == CityPlan.Kind.PARK) return false;
         int minX = cx * 16, minZ = cz * 16;
+        if (layout.plotUse(x, z) == CityLayout.PlotUse.BEACH)
+            return placeBeach(level, minX, minZ, ShoreGeometry.waterMask(layout, x, z),
+                    context.chunkGenerator().getSeaLevel());
+        if (cell.kind() == CityPlan.Kind.PARK
+                && layout.plotUse(x, z) != CityLayout.PlotUse.WATERFRONT) return false;
         RoadProfile profile = new RoadProfile(level, context.chunkGenerator(), cx, cz);
+        if (layout.plotUse(x, z) == CityLayout.PlotUse.WATERFRONT)
+            return placeQuay(level, profile, minX, minZ,
+                    ShoreGeometry.openWaterMask(layout, x, z), 1 << cell.front().ordinal());
         if (cell.kind() == CityPlan.Kind.LOT) return placeLot(level, profile, minX, minZ, cell);
         return placeRoad(level, profile, minX, minZ, layout, x, z, cell);
     }
@@ -65,22 +72,24 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
         CityPlan.Cell east = layout.cell(cx + 1, cz);
         CityPlan.Cell south = layout.cell(cx, cz + 1);
         CityPlan.Cell west = layout.cell(cx - 1, cz);
-        if (north.kind() == CityPlan.Kind.LOT && north.front() == CityPlan.Front.SOUTH) access |= CityPlan.NORTH;
-        if (east.kind() == CityPlan.Kind.LOT && east.front() == CityPlan.Front.WEST) access |= CityPlan.EAST;
-        if (south.kind() == CityPlan.Kind.LOT && south.front() == CityPlan.Front.NORTH) access |= CityPlan.SOUTH;
-        if (west.kind() == CityPlan.Kind.LOT && west.front() == CityPlan.Front.EAST) access |= CityPlan.WEST;
+        if (frontsRoad(north, layout.plotUse(cx, cz - 1), CityPlan.Front.SOUTH)) access |= CityPlan.NORTH;
+        if (frontsRoad(east, layout.plotUse(cx + 1, cz), CityPlan.Front.WEST)) access |= CityPlan.EAST;
+        if (frontsRoad(south, layout.plotUse(cx, cz + 1), CityPlan.Front.NORTH)) access |= CityPlan.SOUTH;
+        if (frontsRoad(west, layout.plotUse(cx - 1, cz), CityPlan.Front.EAST)) access |= CityPlan.WEST;
         int roads = cell.connections();
+        int shore = layout.roadClass(cx, cz) == CityLayout.RoadClass.WATERFRONT
+                ? ShoreGeometry.openWaterMask(layout, cx, cz) : 0;
         // First soften the edge of the roadway within this chunk. Its paved arms
         // connect to the same grade in the adjacent road chunk.
         for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++) {
-            if (paved(roads, access, dx, dz)) continue;
-            int distance = distanceToPavement(roads, access, dx, dz);
+            if (paved(roads, access, shore, dx, dz)) continue;
+            int distance = distanceToPavement(roads, access, shore, dx, dz);
             if (distance > 3) continue;
             int x = minX + dx, z = minZ + dz;
             TerrainWorks.shoulder(level, x, z, profile.surfaceY(x, z) - 1, distance, 4);
         }
         for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++) {
-            if (!paved(roads, access, dx, dz)) continue;
+            if (!paved(roads, access, shore, dx, dz)) continue;
             int x = minX + dx, z = minZ + dz;
             BlockState surface = arms(roads, dx, dz, LANE_HALF_WIDTH)
                     && layout.roadClass(cx, cz) != CityLayout.RoadClass.WATERFRONT
@@ -89,24 +98,81 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
             TerrainWorks.grade(level, x, z, profile.surfaceY(x, z) - 1,
                     surface, 4, Blocks.STONE.defaultBlockState());
         }
+        for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++) {
+            if (!ShoreGeometry.rail(shore, dx, dz)) continue;
+            int x = minX + dx, z = minZ + dz;
+            int groundY = profile.surfaceY(x, z) - 1;
+            if (TerrainWorks.fitsHeight(level, groundY, 2))
+                level.setBlock(new BlockPos(x, groundY + 1, z), Blocks.STONE_BRICKS.defaultBlockState(), 2);
+        }
         return true;
     }
 
-    private static int distanceToPavement(int roads, int access, int x, int z) {
+    private static boolean frontsRoad(CityPlan.Cell cell, CityLayout.PlotUse use, CityPlan.Front front) {
+        return (use == CityLayout.PlotUse.BUILDING || use == CityLayout.PlotUse.WATERFRONT)
+                && cell.front() == front;
+    }
+
+    private static int distanceToPavement(int roads, int access, int shore, int x, int z) {
         for (int distance = 1; distance <= 3; distance++) {
             for (int dx = -distance; dx <= distance; dx++) for (int dz = -distance; dz <= distance; dz++) {
                 if (Math.abs(dx) + Math.abs(dz) != distance) continue;
                 int nx = x + dx, nz = z + dz;
-                if (nx >= 0 && nx < 16 && nz >= 0 && nz < 16 && paved(roads, access, nx, nz))
+                if (nx >= 0 && nx < 16 && nz >= 0 && nz < 16 && paved(roads, access, shore, nx, nz))
                     return distance;
             }
         }
         return 4;
     }
 
-    private static boolean paved(int roads, int access, int dx, int dz) {
+    private static boolean paved(int roads, int access, int shore, int dx, int dz) {
         return arms(roads, dx, dz, SIDEWALK_HALF_WIDTH)
-                || arms(access, dx, dz, PATH_HALF_WIDTH);
+                || arms(access, dx, dz, PATH_HALF_WIDTH)
+                || ShoreGeometry.beach(shore, dx, dz);
+    }
+
+    private static boolean placeBeach(WorldGenLevel level, int minX, int minZ, int shore, int seaLevel) {
+        boolean placed = false;
+        for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++) {
+            if (!ShoreGeometry.beach(shore, dx, dz)) continue;
+            int x = minX + dx, z = minZ + dz;
+            int y = TerrainWorks.naturalY(level, x, z);
+            if (y < seaLevel - 2 || y > seaLevel + 3) continue;
+            BlockPos ground = new BlockPos(x, y, z);
+            if (!level.getFluidState(ground).isEmpty() || !level.getFluidState(ground.above()).isEmpty()) continue;
+            BlockState state = level.getBlockState(ground);
+            if (!state.is(Blocks.GRASS_BLOCK) && !state.is(Blocks.DIRT)
+                    && !state.is(Blocks.COARSE_DIRT) && !state.is(Blocks.GRAVEL)) continue;
+            level.setBlock(ground, Blocks.SAND.defaultBlockState(), 2);
+            placed = true;
+        }
+        return placed;
+    }
+
+    private static boolean placeQuay(WorldGenLevel level, RoadProfile profile, int minX, int minZ,
+                                     int shore, int frontage) {
+        if (shore == 0 || !TerrainWorks.fitsHeight(level, profile.surfaceY(minX + 8, minZ + 8) - 1, 4))
+            return false;
+        // Validate the complete path first: an unusable cliff or flooded strip
+        // stays natural instead of leaving an isolated fragment of promenade.
+        for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++) {
+            if (!ShoreGeometry.quay(shore, frontage, dx, dz)) continue;
+            int x = minX + dx, z = minZ + dz;
+            int groundY = profile.surfaceY(x, z) - 1;
+            if (!TerrainWorks.fitsHeight(level, groundY, 4)
+                    || Math.abs(TerrainWorks.naturalY(level, x, z) - groundY) > 5
+                    || !TerrainWorks.canBuildLot(level, x, z, groundY)) return false;
+        }
+        for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++) {
+            if (!ShoreGeometry.quay(shore, frontage, dx, dz)) continue;
+            int x = minX + dx, z = minZ + dz;
+            int groundY = profile.surfaceY(x, z) - 1;
+            TerrainWorks.grade(level, x, z, groundY, Blocks.STONE_BRICKS.defaultBlockState(), 4,
+                    Blocks.STONE.defaultBlockState());
+            if (ShoreGeometry.rail(shore, dx, dz))
+                level.setBlock(new BlockPos(x, groundY + 1, z), Blocks.STONE_BRICKS.defaultBlockState(), 2);
+        }
+        return true;
     }
 
     private static boolean arms(int mask, int dx, int dz, int halfWidth) {
