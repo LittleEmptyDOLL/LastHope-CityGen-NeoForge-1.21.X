@@ -72,6 +72,29 @@ public final class StructureCatalog extends SimpleJsonResourceReloadListener {
 
     public Optional<StructureDefinition> choose(ResourceLocation category, int plotWidth, int plotDepth, long seed) {
         List<StructureDefinition> candidates = findCompatible(category, plotWidth, plotDepth);
+        return chooseWeighted(candidates, seed);
+    }
+
+    /** Selects only templates genuinely larger than one chunk, in their final orientation. */
+    public Optional<StructureDefinition> chooseLarge(ResourceLocation category, int width, int depth,
+                                                     boolean northSouthFront, long seed) {
+        List<StructureDefinition> candidates = definitions.values().stream()
+                .filter(definition -> definition.category().equals(category))
+                .filter(definition -> definition.size() != StructureSize.SMALL)
+                .filter(definition -> definition.dimensions().width() > 12
+                        || definition.dimensions().depth() > 12)
+                .filter(definition -> {
+                    StructureDimensions dimensions = definition.dimensions();
+                    boolean swap = (definition.front().getAxis() == Direction.Axis.Z) != northSouthFront;
+                    return (swap ? dimensions.depth() : dimensions.width()) <= width
+                            && (swap ? dimensions.width() : dimensions.depth()) <= depth;
+                })
+                .sorted(Comparator.comparing(definition -> definition.id().toString()))
+                .toList();
+        return chooseWeighted(candidates, seed);
+    }
+
+    private Optional<StructureDefinition> chooseWeighted(List<StructureDefinition> candidates, long seed) {
         if (candidates.isEmpty()) return Optional.empty();
         int total = candidates.stream().mapToInt(StructureDefinition::weight).sum();
         int roll = new Random(seed).nextInt(total);
