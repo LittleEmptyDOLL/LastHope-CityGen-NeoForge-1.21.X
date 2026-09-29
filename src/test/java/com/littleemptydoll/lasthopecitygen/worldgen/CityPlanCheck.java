@@ -33,6 +33,25 @@ public final class CityPlanCheck {
         }
         assert shapes.size() >= 2 : "Every city has the same road pattern";
         assert largePlots > 0 : "No two-chunk plots on level terrain";
+        int corners = 0, junctions = 0, crosses = 0;
+        Set<Integer> roadCounts = new HashSet<>();
+        for (long otherSeed = 1; otherSeed <= 64; otherSeed++) {
+            CityLayout layout = CityLayout.plan(otherSeed, 1, -1, flat).orElseThrow();
+            verify(layout, flat);
+            roadCounts.add(layout.roadCount());
+            assert layout.blocks().stream().anyMatch(block -> block.cells() >= 4)
+                    : "No usable block on level ground";
+            for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) {
+                switch (layout.cell(x, z).kind()) {
+                    case CORNER -> corners++;
+                    case T_JUNCTION -> junctions++;
+                    case CROSS -> crosses++;
+                    default -> { }
+                }
+            }
+        }
+        assert corners > 0 && junctions > 0 && crosses > 0 : "Lost street variety";
+        assert roadCounts.size() >= 3 : "Every city has the same street density";
 
         CityLayout.Terrain coast = terrain(64);
         for (int x = 6; x < 8; x++) for (int z = 0; z < 8; z++) coast.water()[x][z] = true;
@@ -46,6 +65,10 @@ public final class CityPlanCheck {
         CityLayout riverside = CityLayout.plan(seed, 2, 0, river).orElseThrow();
         verify(riverside, river);
         assert dryRoads(riverside, river) > 0;
+        for (long otherSeed = 1; otherSeed <= 32; otherSeed++) {
+            CityLayout.plan(otherSeed, 2, 0, river).ifPresent(layout -> verify(layout, river));
+            CityLayout.plan(otherSeed, 1, 0, coast).ifPresent(layout -> verify(layout, coast));
+        }
         for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) {
             if (!riverside.cell(x, z).isRoad()) continue;
             int mask = ShoreGeometry.openWaterMask(riverside, x, z);
@@ -152,9 +175,10 @@ public final class CityPlanCheck {
     private static void verify(CityLayout layout, CityLayout.Terrain terrain) {
         boolean[][] visited = new boolean[8][8];
         ArrayDeque<int[]> queue = new ArrayDeque<>();
-        int roads = 0, lots = 0, blockCells = 0;
+        int roads = 0, lots = 0, blockCells = 0, dryCells = 0;
         for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) {
             CityPlan.Cell cell = layout.cell(x, z);
+            if (!terrain.water()[x][z]) dryCells++;
             if (cell.isRoad()) {
                 roads++;
                 if (queue.isEmpty()) queue.add(new int[] {x, z});
@@ -191,6 +215,11 @@ public final class CityPlanCheck {
         }
         assert reached == roads : "Disconnected streets";
         assert roads == layout.roadCount() && roads >= 5;
+        assert roads <= Math.min(22, dryCells * 2 / 5) : "Roads consumed too much of the site";
+        for (int x = 0; x < 7; x++) for (int z = 0; z < 7; z++)
+            assert !(layout.cell(x, z).isRoad() && layout.cell(x + 1, z).isRoad()
+                    && layout.cell(x, z + 1).isRoad() && layout.cell(x + 1, z + 1).isRoad())
+                    : "Solid 2x2 road patch";
         assert layout.blocks().stream().mapToInt(CityLayout.CityBlock::cells).sum() == blockCells;
         int reserved = 0;
         for (CityLayout.LargePlot plot : layout.largePlots()) {
