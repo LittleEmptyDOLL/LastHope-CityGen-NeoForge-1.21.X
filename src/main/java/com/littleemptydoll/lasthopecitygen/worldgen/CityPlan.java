@@ -7,8 +7,8 @@ import java.util.function.Predicate;
 public final class CityPlan {
     public static final int REGION = 32;
     public static final int SIZE = 8;
+    public static final int MAX_SIZE = 16;
     public static final int REGION_BLOCKS = REGION * 16;
-    public static final int OFFSET = (REGION - SIZE) / 2;
     private static final int SEARCH_RADIUS_REGIONS = 16;
 
     public static final int NORTH = 1;
@@ -31,6 +31,15 @@ public final class CityPlan {
     public record CityCenter(int blockX, int blockZ) { }
 
     private CityPlan() { }
+
+    /** Even footprints keep the center of every city at the region center. */
+    public static int sizeFor(long seed, int regionX, int regionZ) {
+        long value = mix(seed ^ ((long) regionX * 0x71D67FFFEDA60001L)
+                ^ ((long) regionZ * 0x9E3779B97F4A7C15L) ^ 0x5B27C1A9D3E4F608L);
+        return SIZE + 2 * (int) Long.remainderUnsigned(value, 5);
+    }
+
+    public static int offsetFor(int size) { return (REGION - size) / 2; }
 
     /** One region in six; region selection does not depend on chunk traversal. */
     public static boolean hasCity(long seed, int regionX, int regionZ) {

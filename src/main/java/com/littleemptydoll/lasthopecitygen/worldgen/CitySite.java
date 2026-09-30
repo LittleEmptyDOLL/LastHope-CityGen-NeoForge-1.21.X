@@ -31,11 +31,13 @@ public final class CitySite {
         Key key = new Key(generator, randomState, seed, regionX, regionZ);
         Optional<CityLayout> cached = CACHE.get(key);
         if (cached != null) return cached;
-        int[][] height = new int[CityPlan.SIZE][CityPlan.SIZE];
-        boolean[][] water = new boolean[CityPlan.SIZE][CityPlan.SIZE];
-        for (int x = 0; x < CityPlan.SIZE; x++) for (int z = 0; z < CityPlan.SIZE; z++) {
-            int blockX = (regionX * CityPlan.REGION + CityPlan.OFFSET + x) * 16 + 8;
-            int blockZ = (regionZ * CityPlan.REGION + CityPlan.OFFSET + z) * 16 + 8;
+        int size = CityPlan.sizeFor(seed, regionX, regionZ);
+        int offset = CityPlan.offsetFor(size);
+        int[][] height = new int[size][size];
+        boolean[][] water = new boolean[size][size];
+        for (int x = 0; x < size; x++) for (int z = 0; z < size; z++) {
+            int blockX = (regionX * CityPlan.REGION + offset + x) * 16 + 8;
+            int blockZ = (regionZ * CityPlan.REGION + offset + z) * 16 + 8;
             int surface = generator.getBaseHeight(blockX, blockZ, Heightmap.Types.WORLD_SURFACE_WG,
                     level, randomState);
             int floor = generator.getBaseHeight(blockX, blockZ, Heightmap.Types.OCEAN_FLOOR_WG,
