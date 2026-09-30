@@ -8,15 +8,16 @@ import net.minecraft.world.level.levelgen.RandomState;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Shared, order-independent road grade. Neighboring chunks sample the same anchors. */
+/** Shared, order-independent road grade from the original terrain around each anchor. */
 final class RoadProfile {
-    private static final int SPACING = 32;
+    private static final int SPACING = 4;
     private static final int MAX_CITY_RELIEF = 12;
     private final WorldGenLevel level;
     private final ChunkGenerator generator;
     private final RandomState randomState;
     private final int cityHeight;
     private final Map<Long, Integer> samples = new HashMap<>();
+    private final Map<Long, Integer> naturalSamples = new HashMap<>();
 
     RoadProfile(WorldGenLevel level, ChunkGenerator generator, int chunkX, int chunkZ) {
         this.level = level;
@@ -43,8 +44,14 @@ final class RoadProfile {
     private int sample(int gx, int gz) {
         long key = ((long) gx << 32) ^ (gz & 0xffffffffL);
         return samples.computeIfAbsent(key, ignored -> {
-            int natural = generator.getBaseHeight(gx * SPACING, gz * SPACING,
-                    Heightmap.Types.WORLD_SURFACE_WG, level, randomState);
+            // Nearby original surface blocks soften ridges without depending on
+            // the order in which the neighboring road chunks are generated.
+            int natural = 0;
+            for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+                int weight = (dx == 0 ? 2 : 1) * (dz == 0 ? 2 : 1);
+                natural += rawSample(gx + dx, gz + dz) * weight;
+            }
+            natural = (int) Math.round(natural / 16.0);
             int limited = Math.max(cityHeight - MAX_CITY_RELIEF,
                     Math.min(cityHeight + MAX_CITY_RELIEF, natural));
             // Keep open water below the deck, rather than cutting a channel through it.
@@ -52,5 +59,11 @@ final class RoadProfile {
             return Math.max(level.getMinBuildHeight() + 8,
                     Math.min(level.getMaxBuildHeight() - 8, aboveWater));
         });
+    }
+
+    private int rawSample(int gx, int gz) {
+        long key = ((long) gx << 32) ^ (gz & 0xffffffffL);
+        return naturalSamples.computeIfAbsent(key, ignored -> generator.getBaseHeight(
+                gx * SPACING, gz * SPACING, Heightmap.Types.WORLD_SURFACE_WG, level, randomState));
     }
 }

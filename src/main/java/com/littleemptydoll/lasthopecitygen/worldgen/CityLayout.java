@@ -10,13 +10,13 @@ import java.util.PriorityQueue;
 /** One immutable, city-wide plan, built before any of its chunks are modified. */
 public final class CityLayout {
     public enum RoadClass { PRIMARY, SECONDARY, WATERFRONT, BRIDGE }
-    public enum PlotUse { BUILDING, PARK, EMPTY, BEACH, WATERFRONT, INFRASTRUCTURE }
+    public enum PlotUse { BUILDING, PARK, EMPTY, WATERFRONT, INFRASTRUCTURE }
     public record CityBlock(int id, int cells, boolean touchesBoundary, boolean touchesWater) { }
     /** A pair of adjacent 16-block cells with a shared street frontage. */
     public record LargePlot(int x, int z, int widthCells, int depthCells, CityPlan.Front front,
                             CityPlan.District district, long seed) { }
 
-    public record Terrain(int[][] height, boolean[][] water, int seaLevel) {
+    public record Terrain(int[][] height, boolean[][] water) {
         public Terrain {
             if (height.length < CityPlan.SIZE || height.length > CityPlan.MAX_SIZE
                     || (height.length & 1) != 0 || water.length != height.length)
@@ -459,9 +459,8 @@ public final class CityLayout {
                 if (!terrain.water[nx][nz])
                     relief = Math.max(relief, Math.abs(terrain.height[x][z] - terrain.height[nx][nz]));
             }
-            // Heightmaps report the first air block; the visible ground is one lower.
-            if (shore) return terrain.height[x][z] <= terrain.seaLevel + 7
-                    ? PlotUse.BEACH : adjacent != 0 && relief <= 5 ? PlotUse.WATERFRONT : PlotUse.PARK;
+            // Natural beaches and banks stay untouched unless a road provides a quay entrance.
+            if (shore) return adjacent != 0 && relief <= 5 ? PlotUse.WATERFRONT : PlotUse.PARK;
             if (adjacent == 0) return (hash(x, z, 5) & 3) == 0 ? PlotUse.EMPTY : PlotUse.PARK;
             return relief > 8 ? PlotUse.PARK : PlotUse.BUILDING;
         }

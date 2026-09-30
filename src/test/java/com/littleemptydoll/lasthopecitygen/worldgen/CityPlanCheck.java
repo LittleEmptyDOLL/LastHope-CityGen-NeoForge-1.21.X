@@ -113,7 +113,7 @@ public final class CityPlanCheck {
 
     private static void checkVariableCitiesAndShores() {
         Set<Integer> sizes = new HashSet<>();
-        int smallRoads = 0, largeRoads = 0, coastalBeaches = 0, bankRoads = 0, bridges = 0;
+        int smallRoads = 0, largeRoads = 0, naturalBanks = 0, bankRoads = 0, bridges = 0;
         for (int rx = -8; rx <= 8; rx++) for (int rz = -8; rz <= 8; rz++) {
             int size = CityPlan.sizeFor(123456789L, rx, rz);
             sizes.add(size);
@@ -133,7 +133,7 @@ public final class CityPlanCheck {
             CityLayout coastal = CityLayout.plan(123456789L, rx, rz, coast).orElseThrow();
             verify(coastal, coast);
             for (int z = 0; z < size; z++)
-                if (coastal.plotUse(size - 3, z) == CityLayout.PlotUse.BEACH) coastalBeaches++;
+                if (coastal.plotUse(size - 3, z) == CityLayout.PlotUse.PARK) naturalBanks++;
 
             CityLayout.Terrain river = terrain(64, size);
             for (int z = 0; z < size; z++) river.water()[size / 2][z] = true;
@@ -147,7 +147,7 @@ public final class CityPlanCheck {
         }
         assert sizes.equals(Set.of(8, 10, 12, 14, 16)) : "No city-size variation";
         assert largeRoads > smallRoads * 2 : "Large cities did not grow";
-        assert coastalBeaches > 30 : "Low coast rarely produces beaches";
+        assert naturalBanks > 30 : "Natural shoreline was consumed by construction";
         assert bridges > 0 : "River crossings disappeared";
         assert bankRoads > bridges * 2 : "River crossings dominate bank streets";
     }
@@ -156,14 +156,14 @@ public final class CityPlanCheck {
         int[][] height = new int[size][size];
         boolean[][] water = new boolean[size][size];
         for (int x = 0; x < size; x++) for (int z = 0; z < size; z++) height[x][z] = y;
-        return new CityLayout.Terrain(height, water, 63);
+        return new CityLayout.Terrain(height, water);
     }
 
     private static CityLayout.Terrain terrain(int y) {
         int[][] height = new int[8][8];
         boolean[][] water = new boolean[8][8];
         for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) height[x][z] = y;
-        return new CityLayout.Terrain(height, water, 63);
+        return new CityLayout.Terrain(height, water);
     }
 
     private static void checkShoreShapes() {
@@ -171,7 +171,7 @@ public final class CityPlanCheck {
         int[] opposite = {CityPlan.SOUTH, CityPlan.WEST, CityPlan.NORTH, CityPlan.EAST};
         int[] edgeX = {8, 15, 8, 0}, edgeZ = {0, 8, 15, 8};
         for (int i = 0; i < 4; i++) {
-            assert ShoreGeometry.beach(shore[i], edgeX[i], edgeZ[i]);
+            assert ShoreGeometry.shoreBand(shore[i], edgeX[i], edgeZ[i]);
             assert ShoreGeometry.rail(shore[i], edgeX[i], edgeZ[i]);
             assert !ShoreGeometry.rail(shore[i], edgeX[(i + 2) & 3], edgeZ[(i + 2) & 3]);
             if (i % 2 == 0) {
@@ -202,8 +202,7 @@ public final class CityPlanCheck {
     private static int shorePlots(CityLayout layout) {
         int result = 0;
         for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++)
-            if (layout.plotUse(x, z) == CityLayout.PlotUse.BEACH
-                    || layout.plotUse(x, z) == CityLayout.PlotUse.WATERFRONT) result++;
+            if (layout.plotUse(x, z) == CityLayout.PlotUse.WATERFRONT) result++;
         return result;
     }
 
