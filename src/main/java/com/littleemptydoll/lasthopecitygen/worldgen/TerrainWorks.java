@@ -11,6 +11,7 @@ final class TerrainWorks {
     static final int MAX_LOT_EARTHWORK = 12;
     private static final int OPEN_CUT_DEPTH = 12;
     private static final int SOLID_FILL_DEPTH = 6;
+    private static final int SUBGRADE_DEPTH = 8;
 
     private TerrainWorks() { }
 
@@ -57,11 +58,9 @@ final class TerrainWorks {
                       BlockState surface, int clearance, BlockState fill) {
         int naturalY = naturalY(level, x, z);
         boolean wet = !level.getFluidState(new BlockPos(x, naturalY, z)).isEmpty();
+        boolean earthwork = !wet && targetY - naturalY <= SOLID_FILL_DEPTH;
         if (targetY > naturalY || wet && targetY == naturalY) {
-            if (!wet && targetY - naturalY <= SOLID_FILL_DEPTH) {
-                for (int y = naturalY + 1; y < targetY; y++)
-                    level.setBlock(new BlockPos(x, y, z), fill, 2);
-            } else {
+            if (!earthwork) {
                 // A thin deck avoids turning rivers and deep valleys into solid dams.
                 level.setBlock(new BlockPos(x, targetY - 1, z), Blocks.STONE_BRICKS.defaultBlockState(), 2);
                 if (Math.floorMod(x, 4) == 0 && Math.floorMod(z, 4) == 0) {
@@ -69,6 +68,15 @@ final class TerrainWorks {
                     for (int y = floorY + 1; y < targetY - 1; y++)
                         level.setBlock(new BlockPos(x, y, z), Blocks.STONE_BRICKS.defaultBlockState(), 2);
                 }
+            }
+        }
+        if (earthwork) {
+            // Compact the shallow subgrade as well as the raised strip. Caves and
+            // uneven ground could otherwise leave unsupported single-block roads.
+            for (int y = targetY - 1; y >= Math.max(level.getMinBuildHeight(), targetY - SUBGRADE_DEPTH); y--) {
+                BlockPos below = new BlockPos(x, y, z);
+                if (level.getBlockState(below).isAir() && level.getFluidState(below).isEmpty())
+                    level.setBlock(below, fill, 2);
             }
         }
         level.setBlock(new BlockPos(x, targetY, z), surface, 2);

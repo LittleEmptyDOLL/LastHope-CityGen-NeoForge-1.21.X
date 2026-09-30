@@ -22,7 +22,7 @@ final class ShoreGeometry {
         return mask;
     }
 
-    static boolean beach(int mask, int x, int z) {
+    static boolean shoreBand(int mask, int x, int z) {
         return (mask & CityPlan.NORTH) != 0 && z <= 5
                 || (mask & CityPlan.EAST) != 0 && x >= 10
                 || (mask & CityPlan.SOUTH) != 0 && z >= 10

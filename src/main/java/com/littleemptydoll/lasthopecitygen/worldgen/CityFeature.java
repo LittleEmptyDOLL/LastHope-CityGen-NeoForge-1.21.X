@@ -57,9 +57,6 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
         CityLayout layout = planned.get();
         CityPlan.Cell cell = layout.cell(x, z);
         int minX = cx * 16, minZ = cz * 16;
-        if (layout.plotUse(x, z) == CityLayout.PlotUse.BEACH)
-            return placeBeach(level, minX, minZ, ShoreGeometry.waterMask(layout, x, z),
-                    context.chunkGenerator().getSeaLevel());
         if (cell.kind() == CityPlan.Kind.PARK
                 && layout.plotUse(x, z) != CityLayout.PlotUse.WATERFRONT) return false;
         RoadProfile profile = new RoadProfile(level, context.chunkGenerator(), cx, cz);
@@ -112,7 +109,6 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
             if (!paved(roads, access, shore, dx, dz)) continue;
             int x = minX + dx, z = minZ + dz;
             BlockState surface = arms(roads, dx, dz, LANE_HALF_WIDTH)
-                    && layout.roadClass(cx, cz) != CityLayout.RoadClass.WATERFRONT
                     ? Blocks.GRAY_CONCRETE.defaultBlockState() : Blocks.STONE_BRICKS.defaultBlockState();
             TerrainWorks.grade(level, x, z, profile.surfaceY(x, z) - 1,
                     surface, 4, Blocks.STONE.defaultBlockState());
@@ -147,26 +143,7 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
     private static boolean paved(int roads, int access, int shore, int dx, int dz) {
         return arms(roads, dx, dz, SIDEWALK_HALF_WIDTH)
                 || arms(access, dx, dz, PATH_HALF_WIDTH)
-                || ShoreGeometry.beach(shore, dx, dz);
-    }
-
-    private static boolean placeBeach(WorldGenLevel level, int minX, int minZ, int shore, int seaLevel) {
-        boolean placed = false;
-        for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++) {
-            if (!ShoreGeometry.beach(shore, dx, dz)) continue;
-            int x = minX + dx, z = minZ + dz;
-            int y = TerrainWorks.naturalY(level, x, z);
-            if (y < seaLevel - 2 || y > seaLevel + 6) continue;
-            BlockPos ground = new BlockPos(x, y, z);
-            if (!level.getFluidState(ground).isEmpty() || !level.getFluidState(ground.above()).isEmpty()) continue;
-            BlockState state = level.getBlockState(ground);
-            if (!state.is(Blocks.GRASS_BLOCK) && !state.is(Blocks.DIRT)
-                    && !state.is(Blocks.COARSE_DIRT) && !state.is(Blocks.GRAVEL)
-                    && !state.is(Blocks.PODZOL) && !state.is(Blocks.ROOTED_DIRT)) continue;
-            level.setBlock(ground, Blocks.SAND.defaultBlockState(), 2);
-            placed = true;
-        }
-        return placed;
+                || ShoreGeometry.shoreBand(shore, dx, dz);
     }
 
     private static boolean placeQuay(WorldGenLevel level, RoadProfile profile, int minX, int minZ,
