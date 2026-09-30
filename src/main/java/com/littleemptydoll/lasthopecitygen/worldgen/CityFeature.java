@@ -45,9 +45,11 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
         int cx = Math.floorDiv(context.origin().getX(), 16);
         int cz = Math.floorDiv(context.origin().getZ(), 16);
         int rx = Math.floorDiv(cx, CityPlan.REGION), rz = Math.floorDiv(cz, CityPlan.REGION);
-        int x = Math.floorMod(cx, CityPlan.REGION) - CityPlan.OFFSET;
-        int z = Math.floorMod(cz, CityPlan.REGION) - CityPlan.OFFSET;
-        if (x < 0 || z < 0 || x >= CityPlan.SIZE || z >= CityPlan.SIZE
+        int size = CityPlan.sizeFor(level.getSeed(), rx, rz);
+        int offset = CityPlan.offsetFor(size);
+        int x = Math.floorMod(cx, CityPlan.REGION) - offset;
+        int z = Math.floorMod(cz, CityPlan.REGION) - offset;
+        if (x < 0 || z < 0 || x >= size || z >= size
                 || !CityPlan.hasCity(level.getSeed(), rx, rz)) return false;
         Optional<CityLayout> planned = CitySite.layout(context.chunkGenerator(), level,
                 level.getLevel().getChunkSource().randomState(), level.getSeed(), rx, rz);
@@ -111,7 +113,6 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
             int x = minX + dx, z = minZ + dz;
             BlockState surface = arms(roads, dx, dz, LANE_HALF_WIDTH)
                     && layout.roadClass(cx, cz) != CityLayout.RoadClass.WATERFRONT
-                    && layout.roadClass(cx, cz) != CityLayout.RoadClass.BRIDGE
                     ? Blocks.GRAY_CONCRETE.defaultBlockState() : Blocks.STONE_BRICKS.defaultBlockState();
             TerrainWorks.grade(level, x, z, profile.surfaceY(x, z) - 1,
                     surface, 4, Blocks.STONE.defaultBlockState());
@@ -155,12 +156,13 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
             if (!ShoreGeometry.beach(shore, dx, dz)) continue;
             int x = minX + dx, z = minZ + dz;
             int y = TerrainWorks.naturalY(level, x, z);
-            if (y < seaLevel - 2 || y > seaLevel + 3) continue;
+            if (y < seaLevel - 2 || y > seaLevel + 6) continue;
             BlockPos ground = new BlockPos(x, y, z);
             if (!level.getFluidState(ground).isEmpty() || !level.getFluidState(ground.above()).isEmpty()) continue;
             BlockState state = level.getBlockState(ground);
             if (!state.is(Blocks.GRASS_BLOCK) && !state.is(Blocks.DIRT)
-                    && !state.is(Blocks.COARSE_DIRT) && !state.is(Blocks.GRAVEL)) continue;
+                    && !state.is(Blocks.COARSE_DIRT) && !state.is(Blocks.GRAVEL)
+                    && !state.is(Blocks.PODZOL) && !state.is(Blocks.ROOTED_DIRT)) continue;
             level.setBlock(ground, Blocks.SAND.defaultBlockState(), 2);
             placed = true;
         }
@@ -228,8 +230,9 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
                 || template.getSize().getY() != definition.dimensions().height()
                 || template.getSize().getZ() != definition.dimensions().depth()) return Optional.empty();
         int width = plot.widthCells() * 16, depth = plot.depthCells() * 16;
-        int plotMinX = (regionX * CityPlan.REGION + CityPlan.OFFSET + plot.x()) * 16;
-        int plotMinZ = (regionZ * CityPlan.REGION + CityPlan.OFFSET + plot.z()) * 16;
+        int offset = CityPlan.offsetFor(CityPlan.sizeFor(level.getSeed(), regionX, regionZ));
+        int plotMinX = (regionX * CityPlan.REGION + offset + plot.x()) * 16;
+        int plotMinZ = (regionZ * CityPlan.REGION + offset + plot.z()) * 16;
         Rotation rotation = rotation(definition.front(), plot.front());
         BoundingBox bounds = template.getBoundingBox(new StructurePlaceSettings().setRotation(rotation), BlockPos.ZERO);
         int rotatedWidth = bounds.maxX() - bounds.minX() + 1;

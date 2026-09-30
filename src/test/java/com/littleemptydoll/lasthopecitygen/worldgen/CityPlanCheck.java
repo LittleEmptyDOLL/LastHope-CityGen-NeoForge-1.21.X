@@ -92,6 +92,7 @@ public final class CityPlanCheck {
             }
         assert waterfront > 0;
         checkShoreShapes();
+        checkVariableCitiesAndShores();
 
         CityLayout.Terrain ocean = terrain(63);
         for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) ocean.water()[x][z] = true;
@@ -108,6 +109,54 @@ public final class CityPlanCheck {
                 assert Math.abs(cliffs.height()[x][z] - cliffs.height()[x + DX[i]][z + DZ[i]]) <= 9;
         }
         System.out.println("CityPlanCheck passed");
+    }
+
+    private static void checkVariableCitiesAndShores() {
+        Set<Integer> sizes = new HashSet<>();
+        int smallRoads = 0, largeRoads = 0, coastalBeaches = 0, bankRoads = 0, bridges = 0;
+        for (int rx = -8; rx <= 8; rx++) for (int rz = -8; rz <= 8; rz++) {
+            int size = CityPlan.sizeFor(123456789L, rx, rz);
+            sizes.add(size);
+            assert size >= CityPlan.SIZE && size <= CityPlan.MAX_SIZE && size % 2 == 0;
+            int offset = CityPlan.offsetFor(size);
+            assert offset >= 0 && offset + size <= CityPlan.REGION;
+            CityLayout.Terrain flat = terrain(64, size);
+            CityLayout layout = CityLayout.plan(123456789L, rx, rz, flat).orElseThrow();
+            verify(layout, flat);
+            assert layout.size() == size;
+            if (size == 8) smallRoads += layout.roadCount();
+            if (size == 16) largeRoads += layout.roadCount();
+
+            CityLayout.Terrain coast = terrain(64, size);
+            for (int x = size - 2; x < size; x++) for (int z = 0; z < size; z++)
+                coast.water()[x][z] = true;
+            CityLayout coastal = CityLayout.plan(123456789L, rx, rz, coast).orElseThrow();
+            verify(coastal, coast);
+            for (int z = 0; z < size; z++)
+                if (coastal.plotUse(size - 3, z) == CityLayout.PlotUse.BEACH) coastalBeaches++;
+
+            CityLayout.Terrain river = terrain(64, size);
+            for (int z = 0; z < size; z++) river.water()[size / 2][z] = true;
+            CityLayout riverside = CityLayout.plan(123456789L, rx, rz, river).orElseThrow();
+            verify(riverside, river);
+            for (int x = 0; x < size; x++) for (int z = 0; z < size; z++) {
+                if (riverside.roadClass(x, z) == CityLayout.RoadClass.BRIDGE) bridges++;
+                if ((x == size / 2 - 1 || x == size / 2 + 1)
+                        && riverside.cell(x, z).isRoad()) bankRoads++;
+            }
+        }
+        assert sizes.equals(Set.of(8, 10, 12, 14, 16)) : "No city-size variation";
+        assert largeRoads > smallRoads * 2 : "Large cities did not grow";
+        assert coastalBeaches > 30 : "Low coast rarely produces beaches";
+        assert bridges > 0 : "River crossings disappeared";
+        assert bankRoads > bridges * 2 : "River crossings dominate bank streets";
+    }
+
+    private static CityLayout.Terrain terrain(int y, int size) {
+        int[][] height = new int[size][size];
+        boolean[][] water = new boolean[size][size];
+        for (int x = 0; x < size; x++) for (int z = 0; z < size; z++) height[x][z] = y;
+        return new CityLayout.Terrain(height, water, 63);
     }
 
     private static CityLayout.Terrain terrain(int y) {
@@ -173,10 +222,10 @@ public final class CityPlanCheck {
     }
 
     private static void verify(CityLayout layout, CityLayout.Terrain terrain) {
-        boolean[][] visited = new boolean[8][8];
+        boolean[][] visited = new boolean[layout.size()][layout.size()];
         ArrayDeque<int[]> queue = new ArrayDeque<>();
         int roads = 0, lots = 0, blockCells = 0, dryCells = 0;
-        for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) {
+        for (int x = 0; x < layout.size(); x++) for (int z = 0; z < layout.size(); z++) {
             CityPlan.Cell cell = layout.cell(x, z);
             if (!terrain.water()[x][z]) dryCells++;
             if (cell.isRoad()) {
@@ -185,7 +234,7 @@ public final class CityPlanCheck {
                 if (terrain.water()[x][z]) assert layout.roadClass(x, z) == CityLayout.RoadClass.BRIDGE;
                 for (int i = 0; i < 4; i++) if ((cell.connections() & (1 << i)) != 0) {
                     int nx = x + DX[i], nz = z + DZ[i];
-                    assert nx >= 0 && nz >= 0 && nx < 8 && nz < 8;
+                    assert nx >= 0 && nz >= 0 && nx < layout.size() && nz < layout.size();
                     assert layout.cell(nx, nz).isRoad();
                     assert (layout.cell(nx, nz).connections() & OPPOSITE[i]) != 0;
                 }
@@ -215,8 +264,8 @@ public final class CityPlanCheck {
         }
         assert reached == roads : "Disconnected streets";
         assert roads == layout.roadCount() && roads >= 5;
-        assert roads <= Math.min(22, dryCells * 2 / 5) : "Roads consumed too much of the site";
-        for (int x = 0; x < 7; x++) for (int z = 0; z < 7; z++)
+        assert roads <= Math.min(22 * layout.size() * layout.size() / 64, dryCells * 2 / 5) : "Roads consumed too much of the site";
+        for (int x = 0; x < layout.size() - 1; x++) for (int z = 0; z < layout.size() - 1; z++)
             assert !(layout.cell(x, z).isRoad() && layout.cell(x + 1, z).isRoad()
                     && layout.cell(x, z + 1).isRoad() && layout.cell(x + 1, z + 1).isRoad())
                     : "Solid 2x2 road patch";
@@ -239,7 +288,7 @@ public final class CityPlanCheck {
                 }
         }
         int seen = 0;
-        for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++)
+        for (int x = 0; x < layout.size(); x++) for (int z = 0; z < layout.size(); z++)
             if (layout.largePlotAt(x, z) != null) seen++;
         assert seen == reserved;
         assert layout.cell(-1, 0).kind() == CityPlan.Kind.OUTSIDE;
