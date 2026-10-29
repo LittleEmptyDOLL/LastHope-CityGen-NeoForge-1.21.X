@@ -53,7 +53,7 @@ public final class CitySite {
             water[x][z] = surface > floor;
         }
         Optional<CityLayout> planned = CityLayout.plan(seed, regionX, regionZ,
-                new CityLayout.Terrain(height, water));
+                new CityLayout.Terrain(height, water), settings);
         CACHE.put(key, planned);
         return planned;
     }

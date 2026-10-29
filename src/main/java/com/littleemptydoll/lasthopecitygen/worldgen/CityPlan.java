@@ -7,7 +7,7 @@ import java.util.function.Predicate;
 public final class CityPlan {
     public static final int REGION = 32;
     public static final int SIZE = 8;
-    public static final int MAX_SIZE = 28;
+    public static final int MAX_SIZE = 30;
     public static final int REGION_BLOCKS = REGION * 16;
     private static final int SEARCH_RADIUS_REGIONS = 16;
 

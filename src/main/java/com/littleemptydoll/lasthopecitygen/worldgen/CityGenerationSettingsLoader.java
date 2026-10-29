@@ -47,11 +47,20 @@ public final class CityGenerationSettingsLoader extends SimpleJsonResourceReload
             }
             JsonObject roads = GsonHelper.getAsJsonObject(root, "road_profile");
             JsonObject terrain = GsonHelper.getAsJsonObject(root, "terrain");
+            JsonObject planning = root.has("planning")
+                    ? GsonHelper.getAsJsonObject(root, "planning") : new JsonObject();
+            CityGenerationSettings.CityPlanning fallback = CityGenerationSettings.defaults().planning();
             CityGenerationSettings settings = new CityGenerationSettings(
                     GsonHelper.getAsInt(root, "region_chance_denominator"), weighted,
                     GsonHelper.getAsInt(roads, "sample_spacing"),
                     GsonHelper.getAsInt(roads, "max_relief"),
-                    GsonHelper.getAsInt(terrain, "subgrade_depth"));
+                    GsonHelper.getAsInt(terrain, "subgrade_depth"),
+                    new CityGenerationSettings.CityPlanning(
+                            GsonHelper.getAsInt(planning, "branch_spacing", fallback.branchSpacing()),
+                            GsonHelper.getAsInt(planning, "branch_length", fallback.branchLength()),
+                            GsonHelper.getAsInt(planning, "road_coverage_percent", fallback.roadCoveragePercent()),
+                            GsonHelper.getAsInt(planning, "civic_radius_percent", fallback.civicRadiusPercent()),
+                            GsonHelper.getAsInt(planning, "industrial_radius_percent", fallback.industrialRadiusPercent())));
             CityGenerationSettings.install(settings);
             LastHopeCityGen.LOGGER.info("Loaded city generation profile {} with {} size variants",
                     PROFILE, settings.citySizes().size());

@@ -99,6 +99,7 @@ public final class CityPlanCheck {
         assert waterfront > 0;
         checkShoreShapes();
         checkVariableCitiesAndShores();
+        checkCityScalePlanning();
 
         CityLayout.Terrain ocean = terrain(63);
         for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) ocean.water()[x][z] = true;
@@ -130,8 +131,8 @@ public final class CityPlanCheck {
             CityLayout layout = CityLayout.plan(123456789L, rx, rz, flat).orElseThrow();
             verify(layout, flat);
             assert layout.size() == size;
-            if (size == 12) smallRoads += layout.roadCount();
-            if (size == 28) largeRoads += layout.roadCount();
+            if (size == 16) smallRoads += layout.roadCount();
+            if (size == 30) largeRoads += layout.roadCount();
 
             CityLayout.Terrain coast = terrain(64, size);
             for (int x = size - 2; x < size; x++) for (int z = 0; z < size; z++)
@@ -151,11 +152,50 @@ public final class CityPlanCheck {
                         && riverside.cell(x, z).isRoad()) bankRoads++;
             }
         }
-        assert sizes.equals(Set.of(12, 16, 20, 24, 28)) : "No city-size variation";
+        assert sizes.equals(Set.of(16, 20, 24, 28, 30)) : "No city-size variation";
         assert largeRoads > smallRoads * 2 : "Large cities did not grow";
         assert naturalBanks > 30 : "Natural shoreline was consumed by construction";
         assert bridges > 0 : "River crossings disappeared";
         assert bankRoads > bridges * 2 : "River crossings dominate bank streets";
+    }
+
+    private static void checkCityScalePlanning() {
+        CityLayout.Terrain flat = terrain(64, 30);
+        Set<String> districtMaps = new HashSet<>();
+        int localStreets = 0;
+        for (long seed = 1; seed <= 32; seed++) {
+            CityLayout layout = CityLayout.plan(seed, 2, -3, flat).orElseThrow();
+            verify(layout, flat);
+            int[] districts = new int[CityPlan.District.values().length];
+            int primary = 0, secondary = 0;
+            StringBuilder map = new StringBuilder();
+            for (int z = 0; z < 30; z++) for (int x = 0; x < 30; x++) {
+                CityPlan.Cell cell = layout.cell(x, z);
+                if (cell.kind() == CityPlan.Kind.LOT) districts[cell.district().ordinal()]++;
+                if (layout.roadClass(x, z) == CityLayout.RoadClass.PRIMARY) primary++;
+                if (layout.roadClass(x, z) == CityLayout.RoadClass.SECONDARY) secondary++;
+                if (layout.roadClass(x, z) == CityLayout.RoadClass.LOCAL) localStreets++;
+                map.append(cell.district().ordinal());
+            }
+            assert primary >= 5 && secondary >= 5 : "Missing city-wide arterial or cross streets";
+            for (int district : districts) assert district > 0 : "A district has no street-fronting plots";
+            districtMaps.add(map.toString());
+        }
+        assert localStreets > 0 : "Missing local access streets";
+        assert districtMaps.size() > 3 : "Districts repeat regardless of seed";
+
+        CityGenerationSettings defaults = CityGenerationSettings.defaults();
+        CityGenerationSettings sparse = new CityGenerationSettings(6, defaults.citySizes(), 4, 12, 8,
+                new CityGenerationSettings.CityPlanning(9, 4, 18, 10, 12));
+        CityLayout standardPlan = CityLayout.plan(11, 2, -3, flat, defaults).orElseThrow();
+        CityLayout sparsePlan = CityLayout.plan(11, 2, -3, flat, sparse).orElseThrow();
+        assert sparsePlan.roadCount() < standardPlan.roadCount() : "Road coverage setting has no effect";
+        int standardCivic = 0, sparseCivic = 0;
+        for (int x = 0; x < 30; x++) for (int z = 0; z < 30; z++) {
+            if (standardPlan.cell(x, z).district() == CityPlan.District.CIVIC) standardCivic++;
+            if (sparsePlan.cell(x, z).district() == CityPlan.District.CIVIC) sparseCivic++;
+        }
+        assert sparseCivic < standardCivic : "District radius setting has no effect";
     }
 
     private static CityLayout.Terrain terrain(int y, int size) {
@@ -269,7 +309,8 @@ public final class CityPlanCheck {
         }
         assert reached == roads : "Disconnected streets";
         assert roads == layout.roadCount() && roads >= 5;
-        assert roads <= Math.min(22 * layout.size() * layout.size() / 64, dryCells * 2 / 5) : "Roads consumed too much of the site";
+        assert roads <= Math.min(CityGenerationSettings.defaults().planning().roadCoveragePercent()
+                * layout.size() * layout.size() / 100, dryCells * 2 / 5) : "Roads consumed too much of the site";
         for (int x = 0; x < layout.size() - 1; x++) for (int z = 0; z < layout.size() - 1; z++)
             assert !(layout.cell(x, z).isRoad() && layout.cell(x + 1, z).isRoad()
                     && layout.cell(x, z + 1).isRoad() && layout.cell(x + 1, z + 1).isRoad())

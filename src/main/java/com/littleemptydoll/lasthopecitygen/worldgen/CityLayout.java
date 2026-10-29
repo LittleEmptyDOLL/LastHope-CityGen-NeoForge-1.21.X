@@ -9,7 +9,7 @@ import java.util.PriorityQueue;
 
 /** One immutable, city-wide plan, built before any of its chunks are modified. */
 public final class CityLayout {
-    public enum RoadClass { PRIMARY, SECONDARY, WATERFRONT, BRIDGE }
+    public enum RoadClass { PRIMARY, SECONDARY, LOCAL, WATERFRONT, BRIDGE }
     public enum PlotUse { BUILDING, PARK, EMPTY, WATERFRONT, INFRASTRUCTURE }
     public record CityBlock(int id, int cells, boolean touchesBoundary, boolean touchesWater) { }
     /** A pair of adjacent 16-block cells with a shared street frontage. */
@@ -20,10 +20,10 @@ public final class CityLayout {
         public Terrain {
             if (height.length < CityPlan.SIZE || height.length > CityPlan.MAX_SIZE
                     || (height.length & 1) != 0 || water.length != height.length)
-                throw new IllegalArgumentException("Expected an even square terrain snapshot of 8 to 28 cells");
+                throw new IllegalArgumentException("Expected an even square terrain snapshot of 8 to 30 cells");
             for (int x = 0; x < height.length; x++)
                 if (height[x].length != height.length || water[x].length != height.length)
-                    throw new IllegalArgumentException("Expected an even square terrain snapshot of 8 to 28 cells");
+                    throw new IllegalArgumentException("Expected an even square terrain snapshot of 8 to 30 cells");
         }
 
         boolean dry(int x, int z) { return inside(x, z, height.length) && !water[x][z]; }
@@ -89,6 +89,11 @@ public final class CityLayout {
     }
 
     public static Optional<CityLayout> plan(long seed, int regionX, int regionZ, Terrain terrain) {
+        return plan(seed, regionX, regionZ, terrain, CityGenerationSettings.current());
+    }
+
+    public static Optional<CityLayout> plan(long seed, int regionX, int regionZ, Terrain terrain,
+                                            CityGenerationSettings settings) {
         int size = terrain.size();
         int dry = 0, central = 0;
         for (int x = 0; x < size; x++) for (int z = 0; z < size; z++) {
@@ -100,7 +105,7 @@ public final class CityLayout {
         }
         // A coast or narrow river is useful, a small island in open sea is not.
         if (dry * 64 < 34 * size * size || central < 9) return Optional.empty();
-        Builder builder = new Builder(seed, regionX, regionZ, terrain, dry);
+        Builder builder = new Builder(seed, regionX, regionZ, terrain, dry, settings.planning());
         builder.grow();
         builder.rationalize();
         if (builder.count < 5) return Optional.empty();
@@ -211,20 +216,25 @@ public final class CityLayout {
                 .comparingInt(Proposal::priority).reversed().thenComparingLong(Proposal::tie));
         private final int majorAxis;
         private final int roadBudget;
+        private final CityGenerationSettings.CityPlanning rules;
+        private final CityDistricts districts;
         private int count;
 
-        Builder(long seed, int regionX, int regionZ, Terrain terrain, int dryCells) {
+        Builder(long seed, int regionX, int regionZ, Terrain terrain, int dryCells,
+                CityGenerationSettings.CityPlanning rules) {
             this.seed = CityPlan.mix(seed ^ ((long) regionX * 0xD6E8FEB86659FD93L)
                     ^ ((long) regionZ * 0xA5A3564E27F8862DL));
             this.regionX = regionX;
             this.regionZ = regionZ;
             this.terrain = terrain;
             this.size = terrain.size();
+            this.rules = rules;
+            this.districts = new CityDistricts(this.seed, terrain, rules);
             links = new int[size][size];
             road = new boolean[size][size];
             classes = new RoadClass[size][size];
             // Keep room for blocks even in a city with a river or coastline.
-            this.roadBudget = Math.min(22 * size * size / 64, dryCells * 2 / 5)
+            this.roadBudget = Math.min(rules.roadCoveragePercent() * size * size / 100, dryCells * 2 / 5)
                     - (int) (this.seed & 3);
             int wetX = 0, wetZ = 0;
             for (int x = 0; x < size; x++) for (int z = 0; z < size; z++)
@@ -248,13 +258,53 @@ public final class CityLayout {
             int forward = majorAxis == 0 ? 0 : 1;
             enqueue(startX, startZ, forward, size - 1, 0, RoadClass.PRIMARY);
             enqueue(startX, startZ, (forward + 2) & 3, size - 1, 0, RoadClass.PRIMARY);
-            enqueue(startX, startZ, (forward + 1) & 3, Math.max(4, size / 2), 1, RoadClass.SECONDARY);
-            enqueue(startX, startZ, (forward + 3) & 3, Math.max(4, size / 2), 1, RoadClass.SECONDARY);
             int attempts = 0;
+            // Establish a connected arterial spine before dividing its sides into blocks.
             while (!queue.isEmpty() && attempts++ < size * size * 4 && count < roadBudget) {
                 Proposal proposal = queue.remove();
                 if (proposal.budget == 0 || !road[proposal.x][proposal.z]) continue;
                 advance(proposal);
+            }
+            seedCrossStreets(startX, startZ);
+            while (!queue.isEmpty() && attempts++ < size * size * 8 && count < roadBudget) {
+                Proposal proposal = queue.remove();
+                if (proposal.budget == 0 || !road[proposal.x][proposal.z]) continue;
+                advance(proposal);
+            }
+            seedLocalStreets();
+            while (!queue.isEmpty() && attempts++ < size * size * 12 && count < roadBudget) {
+                Proposal proposal = queue.remove();
+                if (proposal.budget == 0 || !road[proposal.x][proposal.z]) continue;
+                advance(proposal);
+            }
+        }
+
+        private void seedCrossStreets(int startX, int startZ) {
+            int offset = (int) Long.remainderUnsigned(seed, rules.branchSpacing());
+            for (int x = 1; x < size - 1; x++) for (int z = 1; z < size - 1; z++) {
+                if (!road[x][z] || classes[x][z] != RoadClass.PRIMARY || terrain.water[x][z]) continue;
+                int along = majorAxis == 0 ? z : x;
+                if ((along - offset + rules.branchSpacing()) % rules.branchSpacing() != 0
+                        && (x != startX || z != startZ)) continue;
+                int direction = majorAxis == 0 ? 1 : 0;
+                enqueue(x, z, direction, size - 1, 0, RoadClass.SECONDARY);
+                enqueue(x, z, (direction + 2) & 3, size - 1, 0, RoadClass.SECONDARY);
+            }
+        }
+
+        private void seedLocalStreets() {
+            int spacing = Math.max(3, rules.branchSpacing() - 2);
+            int offset = (int) Long.remainderUnsigned(seed >>> 8, spacing);
+            for (int x = 2; x < size - 2; x++) for (int z = 2; z < size - 2; z++) {
+                if (!road[x][z] || classes[x][z] != RoadClass.SECONDARY) continue;
+                int along = majorAxis == 0 ? x : z;
+                if ((along - offset + spacing) % spacing != 0) continue;
+                int direction = majorAxis == 0 ? 0 : 1;
+                int length = rules.branchLength();
+                if ((hash(x, z, 7) & 3) != 0)
+                    enqueue(x, z, direction, length, 1, RoadClass.LOCAL);
+                if ((hash(x, z, 8) & 3) != 0)
+                    enqueue(x, z, (direction + 2) & 3, length, 1, RoadClass.LOCAL);
             }
         }
 
@@ -297,12 +347,6 @@ public final class CityLayout {
             if (existing) return;
             if (proposal.budget > 1) enqueue(x, z, direction, proposal.budget - 1,
                     proposal.depth, proposal.roadClass);
-            if (proposal.depth < 2 && proposal.budget > 2 && count < roadBudget - 3
-                    && (hash(x, z, direction) & 3) <= (proposal.roadClass == RoadClass.PRIMARY ? 2 : 1)) {
-                int side = (hash(x, z, 7) & 1) == 0 ? 1 : 3;
-                enqueue(x, z, (direction + side) & 3, 2 + (int) (hash(x, z, 4) & 3),
-                        proposal.depth + 1, RoadClass.SECONDARY);
-            }
         }
 
         private int waterRun(int x, int z, int direction) {
@@ -479,8 +523,7 @@ public final class CityLayout {
             int chunkZ = regionZ * CityPlan.REGION + CityPlan.offsetFor(size) + z;
             long lotSeed = CityPlan.mix(seed ^ ((long) chunkX * 0x9E3779B97F4A7C15L)
                     ^ ((long) chunkZ * 0xC2B2AE3D27D4EB4FL));
-            CityPlan.District district = x >= size * 5 / 8 && z >= size * 5 / 8 ? CityPlan.District.INDUSTRIAL
-                    : x >= size * 5 / 8 && z < size / 2 ? CityPlan.District.CIVIC : CityPlan.District.RESIDENTIAL;
+            CityPlan.District district = districts.at(x, z);
             return new CityPlan.Cell(kind, district, front, mask, lotSeed);
         }
 
