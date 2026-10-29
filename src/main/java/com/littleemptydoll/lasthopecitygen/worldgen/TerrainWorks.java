@@ -11,7 +11,6 @@ final class TerrainWorks {
     static final int MAX_LOT_EARTHWORK = 12;
     private static final int OPEN_CUT_DEPTH = 12;
     private static final int SOLID_FILL_DEPTH = 6;
-    private static final int SUBGRADE_DEPTH = 8;
 
     private TerrainWorks() { }
 
@@ -73,7 +72,9 @@ final class TerrainWorks {
         if (earthwork) {
             // Compact the shallow subgrade as well as the raised strip. Caves and
             // uneven ground could otherwise leave unsupported single-block roads.
-            for (int y = targetY - 1; y >= Math.max(level.getMinBuildHeight(), targetY - SUBGRADE_DEPTH); y--) {
+            int bottom = Math.max(level.getMinBuildHeight(),
+                    targetY - CityGenerationSettings.current().subgradeDepth());
+            for (int y = targetY - 1; y >= bottom; y--) {
                 BlockPos below = new BlockPos(x, y, z);
                 if (level.getBlockState(below).isAir() && level.getFluidState(below).isEmpty())
                     level.setBlock(below, fill, 2);

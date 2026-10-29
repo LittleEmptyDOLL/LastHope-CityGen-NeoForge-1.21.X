@@ -17,6 +17,12 @@ public final class CityPlanCheck {
                 candidate -> !candidate.equals(first)).orElseThrow();
         assert !first.equals(next);
         assert CityPlan.nearestCity(seed, 0, 0, candidate -> false).isEmpty();
+        CityGenerationSettings custom = new CityGenerationSettings(1,
+                java.util.List.of(new CityGenerationSettings.WeightedSize(8, 1)), 8, 6, 4);
+        assert CityPlan.sizeFor(seed, 2, 3, custom) == 8;
+        assert CityPlan.hasCity(seed, 2, 3, custom);
+        assert custom.selectSize(Long.MIN_VALUE) == 8;
+        assert CityGenerationSettings.defaults().citySizes().size() == 5;
 
         CityLayout.Terrain flat = terrain(64);
         Set<String> shapes = new HashSet<>();
@@ -124,8 +130,8 @@ public final class CityPlanCheck {
             CityLayout layout = CityLayout.plan(123456789L, rx, rz, flat).orElseThrow();
             verify(layout, flat);
             assert layout.size() == size;
-            if (size == 8) smallRoads += layout.roadCount();
-            if (size == 16) largeRoads += layout.roadCount();
+            if (size == 12) smallRoads += layout.roadCount();
+            if (size == 28) largeRoads += layout.roadCount();
 
             CityLayout.Terrain coast = terrain(64, size);
             for (int x = size - 2; x < size; x++) for (int z = 0; z < size; z++)
@@ -145,7 +151,7 @@ public final class CityPlanCheck {
                         && riverside.cell(x, z).isRoad()) bankRoads++;
             }
         }
-        assert sizes.equals(Set.of(8, 10, 12, 14, 16)) : "No city-size variation";
+        assert sizes.equals(Set.of(12, 16, 20, 24, 28)) : "No city-size variation";
         assert largeRoads > smallRoads * 2 : "Large cities did not grow";
         assert naturalBanks > 30 : "Natural shoreline was consumed by construction";
         assert bridges > 0 : "River crossings disappeared";

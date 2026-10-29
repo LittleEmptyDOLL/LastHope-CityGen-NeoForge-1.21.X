@@ -1,6 +1,7 @@
 package com.littleemptydoll.lasthopecitygen;
 
 import com.littleemptydoll.lasthopecitygen.worldgen.CityFeature;
+import com.littleemptydoll.lasthopecitygen.worldgen.CityGenerationSettingsLoader;
 import com.littleemptydoll.lasthopecitygen.command.CityGenCommands;
 import com.littleemptydoll.lasthopecitygen.structure.catalog.StructureCatalog;
 import com.mojang.logging.LogUtils;
@@ -26,6 +27,7 @@ public final class LastHopeCityGen {
     public LastHopeCityGen(IEventBus modBus) {
         FEATURES.register(modBus);
         NeoForge.EVENT_BUS.addListener(StructureCatalog::onAddReloadListeners);
+        NeoForge.EVENT_BUS.addListener(CityGenerationSettingsLoader::onAddReloadListeners);
         NeoForge.EVENT_BUS.addListener(CityGenCommands::onRegisterCommands);
     }
 }

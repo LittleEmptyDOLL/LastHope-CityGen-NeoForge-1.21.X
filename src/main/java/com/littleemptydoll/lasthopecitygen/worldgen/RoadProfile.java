@@ -10,19 +10,22 @@ import java.util.Map;
 
 /** Shared, order-independent road grade from the original terrain around each anchor. */
 final class RoadProfile {
-    private static final int SPACING = 4;
-    private static final int MAX_CITY_RELIEF = 12;
     private final WorldGenLevel level;
     private final ChunkGenerator generator;
     private final RandomState randomState;
     private final int cityHeight;
+    private final int spacing;
+    private final int maxRelief;
     private final Map<Long, Integer> samples = new HashMap<>();
     private final Map<Long, Integer> naturalSamples = new HashMap<>();
 
-    RoadProfile(WorldGenLevel level, ChunkGenerator generator, int chunkX, int chunkZ) {
+    RoadProfile(WorldGenLevel level, ChunkGenerator generator, int chunkX, int chunkZ,
+                CityGenerationSettings settings) {
         this.level = level;
         this.generator = generator;
         this.randomState = level.getLevel().getChunkSource().randomState();
+        this.spacing = settings.roadSampleSpacing();
+        this.maxRelief = settings.roadReliefLimit();
         CityPlan.CityCenter center = CityPlan.centerForRegion(
                 Math.floorDiv(chunkX, CityPlan.REGION), Math.floorDiv(chunkZ, CityPlan.REGION));
         this.cityHeight = generator.getBaseHeight(center.blockX(), center.blockZ(),
@@ -30,15 +33,15 @@ final class RoadProfile {
     }
 
     int surfaceY(int x, int z) {
-        int gx = Math.floorDiv(x, SPACING);
-        int gz = Math.floorDiv(z, SPACING);
-        int dx = Math.floorMod(x, SPACING);
-        int dz = Math.floorMod(z, SPACING);
-        long a = (long) sample(gx, gz) * (SPACING - dx) * (SPACING - dz);
-        long b = (long) sample(gx + 1, gz) * dx * (SPACING - dz);
-        long c = (long) sample(gx, gz + 1) * (SPACING - dx) * dz;
+        int gx = Math.floorDiv(x, spacing);
+        int gz = Math.floorDiv(z, spacing);
+        int dx = Math.floorMod(x, spacing);
+        int dz = Math.floorMod(z, spacing);
+        long a = (long) sample(gx, gz) * (spacing - dx) * (spacing - dz);
+        long b = (long) sample(gx + 1, gz) * dx * (spacing - dz);
+        long c = (long) sample(gx, gz + 1) * (spacing - dx) * dz;
         long d = (long) sample(gx + 1, gz + 1) * dx * dz;
-        return (int) Math.round((a + b + c + d) / (double) (SPACING * SPACING));
+        return (int) Math.round((a + b + c + d) / (double) (spacing * spacing));
     }
 
     private int sample(int gx, int gz) {
@@ -52,8 +55,8 @@ final class RoadProfile {
                 natural += rawSample(gx + dx, gz + dz) * weight;
             }
             natural = (int) Math.round(natural / 16.0);
-            int limited = Math.max(cityHeight - MAX_CITY_RELIEF,
-                    Math.min(cityHeight + MAX_CITY_RELIEF, natural));
+            int limited = Math.max(cityHeight - maxRelief,
+                    Math.min(cityHeight + maxRelief, natural));
             // Keep open water below the deck, rather than cutting a channel through it.
             int aboveWater = Math.max(generator.getSeaLevel() + 1, limited);
             return Math.max(level.getMinBuildHeight() + 8,
@@ -64,6 +67,6 @@ final class RoadProfile {
     private int rawSample(int gx, int gz) {
         long key = ((long) gx << 32) ^ (gz & 0xffffffffL);
         return naturalSamples.computeIfAbsent(key, ignored -> generator.getBaseHeight(
-                gx * SPACING, gz * SPACING, Heightmap.Types.WORLD_SURFACE_WG, level, randomState));
+                gx * spacing, gz * spacing, Heightmap.Types.WORLD_SURFACE_WG, level, randomState));
     }
 }
