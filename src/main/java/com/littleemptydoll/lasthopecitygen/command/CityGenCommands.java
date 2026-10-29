@@ -6,6 +6,7 @@ import com.littleemptydoll.lasthopecitygen.structure.definition.StructureDefinit
 import com.littleemptydoll.lasthopecitygen.structure.definition.StructureType;
 import com.littleemptydoll.lasthopecitygen.structure.placement.StructurePlacement;
 import com.littleemptydoll.lasthopecitygen.worldgen.CityPlan;
+import com.littleemptydoll.lasthopecitygen.worldgen.CityGenerationSettings;
 import com.littleemptydoll.lasthopecitygen.worldgen.CitySite;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.core.BlockPos;
@@ -57,10 +58,12 @@ public final class CityGenCommands {
         BlockPos position = BlockPos.containing(source.getPosition());
         ChunkGenerator generator = source.getLevel().getChunkSource().getGenerator();
         RandomState randomState = source.getLevel().getChunkSource().randomState();
+        CityGenerationSettings settings = CityGenerationSettings.current();
         Optional<CityPlan.CityCenter> found = CityPlan.nearestCity(source.getLevel().getSeed(),
                 position.getX(), position.getZ(),
                 center -> CitySite.isSuitable(generator, source.getLevel(), randomState,
-                        source.getLevel().getSeed(), center.blockX(), center.blockZ()));
+                        source.getLevel().getSeed(), center.blockX(), center.blockZ(), settings),
+                settings);
         if (found.isEmpty()) {
             source.sendFailure(Component.literal("No city on suitable land found nearby"));
             return 0;

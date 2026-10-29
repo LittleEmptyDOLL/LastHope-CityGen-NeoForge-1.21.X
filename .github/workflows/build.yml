@@ -25,6 +25,7 @@ jobs:
         run: |
           python3 tools/generate_test_structures.py --check
           python3 tools/check_structure_resources.py
+          python3 -m json.tool src/main/resources/data/lasthopecitygen/citygen/generation/default.json > /dev/null
 
       - name: Build with Gradle
         run: ./gradlew build checkCityPlan --no-daemon

@@ -7,7 +7,7 @@ import java.util.function.Predicate;
 public final class CityPlan {
     public static final int REGION = 32;
     public static final int SIZE = 8;
-    public static final int MAX_SIZE = 16;
+    public static final int MAX_SIZE = 28;
     public static final int REGION_BLOCKS = REGION * 16;
     private static final int SEARCH_RADIUS_REGIONS = 16;
 
@@ -34,17 +34,25 @@ public final class CityPlan {
 
     /** Even footprints keep the center of every city at the region center. */
     public static int sizeFor(long seed, int regionX, int regionZ) {
+        return sizeFor(seed, regionX, regionZ, CityGenerationSettings.current());
+    }
+
+    public static int sizeFor(long seed, int regionX, int regionZ, CityGenerationSettings settings) {
         long value = mix(seed ^ ((long) regionX * 0x71D67FFFEDA60001L)
                 ^ ((long) regionZ * 0x9E3779B97F4A7C15L) ^ 0x5B27C1A9D3E4F608L);
-        return SIZE + 2 * (int) Long.remainderUnsigned(value, 5);
+        return settings.selectSize(value);
     }
 
     public static int offsetFor(int size) { return (REGION - size) / 2; }
 
-    /** One region in six; region selection does not depend on chunk traversal. */
+    /** Seeded regional selection does not depend on chunk traversal. */
     public static boolean hasCity(long seed, int regionX, int regionZ) {
+        return hasCity(seed, regionX, regionZ, CityGenerationSettings.current());
+    }
+
+    public static boolean hasCity(long seed, int regionX, int regionZ, CityGenerationSettings settings) {
         return Long.remainderUnsigned(mix(seed ^ ((long) regionX * 0xD6E8FEB86659FD93L)
-                ^ ((long) regionZ * 0xA5A3564E27F8862DL)), 6) == 0;
+                ^ ((long) regionZ * 0xA5A3564E27F8862DL)), settings.regionChanceDenominator()) == 0;
     }
 
     /** Finds a planned city; terrain may prevent some cells from being placed. */
@@ -55,13 +63,19 @@ public final class CityPlan {
     /** Allows callers to skip unsuitable sites without changing the seed-based plan. */
     public static Optional<CityCenter> nearestCity(long seed, int blockX, int blockZ,
                                                     Predicate<CityCenter> suitable) {
+        return nearestCity(seed, blockX, blockZ, suitable, CityGenerationSettings.current());
+    }
+
+    public static Optional<CityCenter> nearestCity(long seed, int blockX, int blockZ,
+                                                    Predicate<CityCenter> suitable,
+                                                    CityGenerationSettings settings) {
         int regionX = Math.floorDiv(blockX, REGION_BLOCKS);
         int regionZ = Math.floorDiv(blockZ, REGION_BLOCKS);
         CityCenter nearest = null;
         long bestDistance = Long.MAX_VALUE;
         for (int rx = regionX - SEARCH_RADIUS_REGIONS; rx <= regionX + SEARCH_RADIUS_REGIONS; rx++) {
             for (int rz = regionZ - SEARCH_RADIUS_REGIONS; rz <= regionZ + SEARCH_RADIUS_REGIONS; rz++) {
-                if (!hasCity(seed, rx, rz)) continue;
+                if (!hasCity(seed, rx, rz, settings)) continue;
                 CityCenter candidate = centerForRegion(rx, rz);
                 int x = candidate.blockX();
                 int z = candidate.blockZ();

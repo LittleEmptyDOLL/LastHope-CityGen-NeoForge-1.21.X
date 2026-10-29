@@ -20,10 +20,10 @@ public final class CityLayout {
         public Terrain {
             if (height.length < CityPlan.SIZE || height.length > CityPlan.MAX_SIZE
                     || (height.length & 1) != 0 || water.length != height.length)
-                throw new IllegalArgumentException("Expected an even square terrain snapshot of 8 to 16 cells");
+                throw new IllegalArgumentException("Expected an even square terrain snapshot of 8 to 28 cells");
             for (int x = 0; x < height.length; x++)
                 if (height[x].length != height.length || water[x].length != height.length)
-                    throw new IllegalArgumentException("Expected an even square terrain snapshot of 8 to 16 cells");
+                    throw new IllegalArgumentException("Expected an even square terrain snapshot of 8 to 28 cells");
         }
 
         boolean dry(int x, int z) { return inside(x, z, height.length) && !water[x][z]; }

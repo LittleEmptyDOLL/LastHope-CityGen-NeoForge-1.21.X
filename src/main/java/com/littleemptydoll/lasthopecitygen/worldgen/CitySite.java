@@ -21,17 +21,24 @@ public final class CitySite {
         }
     });
 
-    private record Key(ChunkGenerator generator, RandomState randomState, long seed,
+    private record Key(ChunkGenerator generator, RandomState randomState, CityGenerationSettings settings, long seed,
                        int regionX, int regionZ) { }
 
     private CitySite() { }
 
     public static Optional<CityLayout> layout(ChunkGenerator generator, LevelHeightAccessor level,
                                               RandomState randomState, long seed, int regionX, int regionZ) {
-        Key key = new Key(generator, randomState, seed, regionX, regionZ);
+        return layout(generator, level, randomState, seed, regionX, regionZ,
+                CityGenerationSettings.current());
+    }
+
+    public static Optional<CityLayout> layout(ChunkGenerator generator, LevelHeightAccessor level,
+                                              RandomState randomState, long seed, int regionX, int regionZ,
+                                              CityGenerationSettings settings) {
+        Key key = new Key(generator, randomState, settings, seed, regionX, regionZ);
         Optional<CityLayout> cached = CACHE.get(key);
         if (cached != null) return cached;
-        int size = CityPlan.sizeFor(seed, regionX, regionZ);
+        int size = CityPlan.sizeFor(seed, regionX, regionZ, settings);
         int offset = CityPlan.offsetFor(size);
         int[][] height = new int[size][size];
         boolean[][] water = new boolean[size][size];
@@ -53,8 +60,15 @@ public final class CitySite {
 
     public static boolean isSuitable(ChunkGenerator generator, LevelHeightAccessor level,
                                      RandomState randomState, long seed, int centerX, int centerZ) {
+        return isSuitable(generator, level, randomState, seed, centerX, centerZ,
+                CityGenerationSettings.current());
+    }
+
+    public static boolean isSuitable(ChunkGenerator generator, LevelHeightAccessor level,
+                                     RandomState randomState, long seed, int centerX, int centerZ,
+                                     CityGenerationSettings settings) {
         return layout(generator, level, randomState, seed,
                 Math.floorDiv(centerX, CityPlan.REGION_BLOCKS),
-                Math.floorDiv(centerZ, CityPlan.REGION_BLOCKS)).isPresent();
+                Math.floorDiv(centerZ, CityPlan.REGION_BLOCKS), settings).isPresent();
     }
 }

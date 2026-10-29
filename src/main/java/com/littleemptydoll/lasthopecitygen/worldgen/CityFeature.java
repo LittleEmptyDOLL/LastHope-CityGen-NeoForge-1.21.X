@@ -45,21 +45,22 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
         int cx = Math.floorDiv(context.origin().getX(), 16);
         int cz = Math.floorDiv(context.origin().getZ(), 16);
         int rx = Math.floorDiv(cx, CityPlan.REGION), rz = Math.floorDiv(cz, CityPlan.REGION);
-        int size = CityPlan.sizeFor(level.getSeed(), rx, rz);
+        CityGenerationSettings settings = CityGenerationSettings.current();
+        int size = CityPlan.sizeFor(level.getSeed(), rx, rz, settings);
         int offset = CityPlan.offsetFor(size);
         int x = Math.floorMod(cx, CityPlan.REGION) - offset;
         int z = Math.floorMod(cz, CityPlan.REGION) - offset;
         if (x < 0 || z < 0 || x >= size || z >= size
-                || !CityPlan.hasCity(level.getSeed(), rx, rz)) return false;
+                || !CityPlan.hasCity(level.getSeed(), rx, rz, settings)) return false;
         Optional<CityLayout> planned = CitySite.layout(context.chunkGenerator(), level,
-                level.getLevel().getChunkSource().randomState(), level.getSeed(), rx, rz);
+                level.getLevel().getChunkSource().randomState(), level.getSeed(), rx, rz, settings);
         if (planned.isEmpty()) return false;
         CityLayout layout = planned.get();
         CityPlan.Cell cell = layout.cell(x, z);
         int minX = cx * 16, minZ = cz * 16;
         if (cell.kind() == CityPlan.Kind.PARK
                 && layout.plotUse(x, z) != CityLayout.PlotUse.WATERFRONT) return false;
-        RoadProfile profile = new RoadProfile(level, context.chunkGenerator(), cx, cz);
+        RoadProfile profile = new RoadProfile(level, context.chunkGenerator(), cx, cz, settings);
         if (layout.plotUse(x, z) == CityLayout.PlotUse.WATERFRONT)
             return placeQuay(level, profile, minX, minZ,
                     ShoreGeometry.openWaterMask(layout, x, z), 1 << cell.front().ordinal());
@@ -72,7 +73,7 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
                         plot.front() == CityPlan.Front.NORTH || plot.front() == CityPlan.Front.SOUTH, plot.seed());
                 if (larger.isPresent()) {
                     Optional<LargePlacement> placement = prepareLarge(level, context.chunkGenerator(), profile,
-                            rx, rz, plot, larger.get());
+                            rx, rz, offset, plot, larger.get());
                     if (placement.isPresent())
                         return placeLargePiece(level, minX, minZ, plot, placement.get());
                 }
@@ -198,7 +199,7 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
                                   int width, int depth) { }
 
     private static Optional<LargePlacement> prepareLarge(WorldGenLevel level, ChunkGenerator generator,
-                                                          RoadProfile profile, int regionX, int regionZ,
+                                                          RoadProfile profile, int regionX, int regionZ, int offset,
                                                           CityLayout.LargePlot plot, StructureDefinition definition) {
         Optional<StructureTemplate> found = level.getLevel().getStructureManager().get(definition.singleSource().template());
         if (found.isEmpty()) return Optional.empty();
@@ -207,7 +208,6 @@ public final class CityFeature extends Feature<NoneFeatureConfiguration> {
                 || template.getSize().getY() != definition.dimensions().height()
                 || template.getSize().getZ() != definition.dimensions().depth()) return Optional.empty();
         int width = plot.widthCells() * 16, depth = plot.depthCells() * 16;
-        int offset = CityPlan.offsetFor(CityPlan.sizeFor(level.getSeed(), regionX, regionZ));
         int plotMinX = (regionX * CityPlan.REGION + offset + plot.x()) * 16;
         int plotMinZ = (regionZ * CityPlan.REGION + offset + plot.z()) * 16;
         Rotation rotation = rotation(definition.front(), plot.front());
