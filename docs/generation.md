@@ -5,12 +5,17 @@ Override `data/lasthopecitygen/citygen/generation/default.json` in a datapack to
 | Setting | Meaning | Allowed |
 | --- | --- | --- |
 | `region_chance_denominator` | One candidate region in this many, chosen by seed | 1–128 |
-| `city_sizes` | Weighted square footprints in chunks | 1–16 entries; even sizes 8–28, positive weights 1–1000, total at most 10000 |
+| `city_sizes` | Weighted square footprints in chunks | 1–16 entries; even sizes 8–30, positive weights 1–1000, total at most 10000 |
+| `planning.branch_spacing` | Approximate spacing of cross streets along the main road, in chunks | 3–16; default 6 |
+| `planning.branch_length` | Maximum length of local access streets, in chunks | 2–24; default 7 |
+| `planning.road_coverage_percent` | Maximum road cells as a percentage of the footprint, also capped by available dry land | 15–40; default 28 |
+| `planning.civic_radius_percent` | Manhattan radius of the civic center as a percentage of city width | 10–45; default 23 |
+| `planning.industrial_radius_percent` | Manhattan radius of the industrial cluster as a percentage of city width | 10–45; default 29 |
 | `road_profile.sample_spacing` | Spacing between original terrain samples used for the road elevation | 2, 4, 8, 16 or 32 blocks |
 | `road_profile.max_relief` | Maximum deviation of road sample elevation from the city-center elevation | 0–32 blocks |
 | `terrain.subgrade_depth` | Maximum depth of shallow air pockets filled below normal paved terrain | 1–32 blocks |
 
-The footprint is currently square and centered inside a 32 × 32 chunk region. With sizes 20–28 chunks, its approximate half-width is 160–224 blocks; this is comparable in scale to the 135–230 block city-radius interval in the modpack's `last_hope` Lost Cities profile, but is not the same shape or occurrence algorithm. Changing topology settings after some chunks have generated can leave boundaries between old and new plans. Test a profile in a new world.
+The footprint is currently square and centered inside a 32 × 32 chunk region. The default sizes 16–30 chunks give sides of 256–480 blocks. The eligible footprint is larger than the actual street and building area: water, relief and missing templates may leave natural land. The planner first extends a main road, then cross streets from multiple points on that road, then short access streets. Each phase uses the same terrain, crossing and connected-road checks. Civic and industrial clusters are centered on suitable dry cells; residential plots fill the remainder. District centers and boundaries vary with the seed. The district radius is measured in chunk cells, not the Lost Cities block-radius setting. Older datapacks without `planning` receive the default planning values. Changing topology settings after some chunks have generated can leave boundaries between old and new plans. Test a profile in a new world.
 
 ## Terrain transition design
 

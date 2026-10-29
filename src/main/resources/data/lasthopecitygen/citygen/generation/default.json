@@ -1,15 +1,22 @@
 {
   "region_chance_denominator": 6,
   "city_sizes": [
-    {"chunks": 12, "weight": 1},
-    {"chunks": 16, "weight": 2},
-    {"chunks": 20, "weight": 3},
-    {"chunks": 24, "weight": 2},
-    {"chunks": 28, "weight": 1}
+    {"chunks": 16, "weight": 1},
+    {"chunks": 20, "weight": 2},
+    {"chunks": 24, "weight": 3},
+    {"chunks": 28, "weight": 2},
+    {"chunks": 30, "weight": 1}
   ],
   "road_profile": {
     "sample_spacing": 4,
     "max_relief": 12
+  },
+  "planning": {
+    "branch_spacing": 6,
+    "branch_length": 7,
+    "road_coverage_percent": 28,
+    "civic_radius_percent": 23,
+    "industrial_radius_percent": 29
   },
   "terrain": {
     "subgrade_depth": 8
