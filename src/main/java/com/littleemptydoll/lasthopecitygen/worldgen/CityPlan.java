@@ -1,5 +1,8 @@
 package com.littleemptydoll.lasthopecitygen.worldgen;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
 
@@ -29,6 +32,7 @@ public final class CityPlan {
         }
     }
     public record CityCenter(int blockX, int blockZ) { }
+    private record Candidate(CityCenter center, long distance) { }
 
     private CityPlan() { }
 
@@ -71,24 +75,25 @@ public final class CityPlan {
                                                     CityGenerationSettings settings) {
         int regionX = Math.floorDiv(blockX, REGION_BLOCKS);
         int regionZ = Math.floorDiv(blockZ, REGION_BLOCKS);
-        CityCenter nearest = null;
-        long bestDistance = Long.MAX_VALUE;
+        List<Candidate> candidates = new ArrayList<>();
         for (int rx = regionX - SEARCH_RADIUS_REGIONS; rx <= regionX + SEARCH_RADIUS_REGIONS; rx++) {
             for (int rz = regionZ - SEARCH_RADIUS_REGIONS; rz <= regionZ + SEARCH_RADIUS_REGIONS; rz++) {
                 if (!hasCity(seed, rx, rz, settings)) continue;
                 CityCenter candidate = centerForRegion(rx, rz);
-                int x = candidate.blockX();
-                int z = candidate.blockZ();
-                long dx = (long) x - blockX;
-                long dz = (long) z - blockZ;
+                long dx = (long) candidate.blockX() - blockX;
+                long dz = (long) candidate.blockZ() - blockZ;
                 long distance = dx * dx + dz * dz;
-                if (distance < bestDistance && suitable.test(candidate)) {
-                    bestDistance = distance;
-                    nearest = candidate;
-                }
+                candidates.add(new Candidate(candidate, distance));
             }
         }
-        return Optional.ofNullable(nearest);
+        // Terrain suitability is expensive: evaluate it only for the closest
+        // candidates, stopping at the first valid site.
+        candidates.sort(Comparator.comparingLong(Candidate::distance)
+                .thenComparingInt(candidate -> candidate.center().blockX())
+                .thenComparingInt(candidate -> candidate.center().blockZ()));
+        for (Candidate candidate : candidates)
+            if (suitable.test(candidate.center())) return Optional.of(candidate.center());
+        return Optional.empty();
     }
 
     public static CityCenter centerForRegion(int regionX, int regionZ) {

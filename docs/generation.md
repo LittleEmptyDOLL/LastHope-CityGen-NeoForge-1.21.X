@@ -17,6 +17,12 @@ Override `data/lasthopecitygen/citygen/generation/default.json` in a datapack to
 
 The footprint is currently square and centered inside a 32 × 32 chunk region. The default sizes 16–30 chunks give sides of 256–480 blocks. The eligible footprint is larger than the actual street and building area: water, relief and missing templates may leave natural land. The planner first extends a main road, then cross streets from multiple points on that road, then short access streets. Each phase uses the same terrain, crossing and connected-road checks. Civic and industrial clusters are centered on suitable dry cells; residential plots fill the remainder. District centers and boundaries vary with the seed. The district radius is measured in chunk cells, not the Lost Cities block-radius setting. Older datapacks without `planning` receive the default planning values. Changing topology settings after some chunks have generated can leave boundaries between old and new plans. Test a profile in a new world.
 
+## Search, city scale and generation cost
+
+Each region is **32 chunks = 512 blocks** wide. A city candidate is selected independently in each region; a region without a candidate has no planned city. Adjacent city footprints do not currently join, even when both regions contain a candidate. A continuous city spanning many regions needs a separate metropolitan plan that coordinates connected roads and district borders; raising `city_sizes` beyond the 30-chunk limit would not accomplish that.
+
+`/citygen locate` orders seed-selected candidates by distance before testing terrain. It stops as soon as a suitable city is found. This matters because a terrain check plans an entire candidate footprint. The actual plan is cached for subsequent chunk generation. Simultaneous chunks requesting the same region share one calculation, including the result when the site is unsuitable. Road elevations reuse a bounded cache of original terrain samples between adjacent chunks; the samples are keyed by the generator, its random state, spacing and world coordinates. Both caches are bounded and contain only values derived from original terrain, so chunk order cannot alter the plan. Medium plots still check their full footprint separately when placed and can be expensive.
+
 ## Terrain transition design
 
 The current road profile smoothly interpolates nearby **original** terrain samples. Pavement and immediate shoulders are then graded inside their own chunks. This does not yet move natural terrain in adjacent non-city chunks.

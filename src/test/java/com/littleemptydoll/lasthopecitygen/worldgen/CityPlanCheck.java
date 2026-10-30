@@ -13,9 +13,19 @@ public final class CityPlanCheck {
     public static void main(String[] args) {
         long seed = 123456789;
         CityPlan.CityCenter first = CityPlan.nearestCity(seed, 0, 0).orElseThrow();
+        int[] checks = {0};
+        assert CityPlan.nearestCity(seed, 0, 0, center -> {
+            checks[0]++;
+            return true;
+        }).orElseThrow().equals(first);
+        assert checks[0] == 1 : "Locate evaluated distant sites before the nearest one";
         CityPlan.CityCenter next = CityPlan.nearestCity(seed, 0, 0,
-                candidate -> !candidate.equals(first)).orElseThrow();
+                candidate -> {
+                    checks[0]++;
+                    return !candidate.equals(first);
+                }).orElseThrow();
         assert !first.equals(next);
+        assert checks[0] == 3 : "Locate checked a distant candidate before the next closest one";
         assert CityPlan.nearestCity(seed, 0, 0, candidate -> false).isEmpty();
         CityGenerationSettings custom = new CityGenerationSettings(1,
                 java.util.List.of(new CityGenerationSettings.WeightedSize(8, 1)), 8, 6, 4);

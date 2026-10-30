@@ -83,9 +83,14 @@ final class TerrainWorks {
         level.setBlock(new BlockPos(x, targetY, z), surface, 2);
         int top = naturalY - targetY <= OPEN_CUT_DEPTH
                 ? Math.max(naturalY, targetY) + clearance : targetY + clearance;
-        top = Math.min(top, level.getMaxBuildHeight() - 1);
-        for (int y = targetY + 1; y <= top; y++)
-            level.setBlock(new BlockPos(x, y, z), Blocks.AIR.defaultBlockState(), 2);
+        // WORLD_SURFACE_WG already guarantees air above naturalY. Most road
+        // columns need no clearance writes at all; only remove actual blocks.
+        top = Math.min(Math.min(top, naturalY), level.getMaxBuildHeight() - 1);
+        for (int y = targetY + 1; y <= top; y++) {
+            BlockPos above = new BlockPos(x, y, z);
+            if (!level.getBlockState(above).isAir())
+                level.setBlock(above, Blocks.AIR.defaultBlockState(), 2);
+        }
         if (naturalY - targetY > OPEN_CUT_DEPTH)
             level.setBlock(new BlockPos(x, targetY + clearance + 1, z),
                     Blocks.STONE_BRICKS.defaultBlockState(), 2);

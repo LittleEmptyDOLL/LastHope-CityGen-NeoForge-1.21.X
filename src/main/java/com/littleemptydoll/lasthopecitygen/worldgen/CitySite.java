@@ -1,25 +1,22 @@
 package com.littleemptydoll.lasthopecitygen.worldgen;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import net.minecraft.world.level.LevelHeightAccessor;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.RandomState;
 
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
 
 /** Captures the unmodified worldgen terrain once for every planned city region. */
 public final class CitySite {
     private static final int CACHE_SIZE = 256;
-    private static final Map<Key, Optional<CityLayout>> CACHE = Collections.synchronizedMap(new LinkedHashMap<>(
-            CACHE_SIZE, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<Key, Optional<CityLayout>> eldest) {
-            return size() > CACHE_SIZE;
-        }
-    });
+    // Cache.get performs one calculation per key even when adjacent chunks
+    // arrive on different worldgen threads at the same time.
+    private static final Cache<Key, Optional<CityLayout>> CACHE = CacheBuilder.newBuilder()
+            .maximumSize(CACHE_SIZE).build();
 
     private record Key(ChunkGenerator generator, RandomState randomState, CityGenerationSettings settings, long seed,
                        int regionX, int regionZ) { }
@@ -36,8 +33,17 @@ public final class CitySite {
                                               RandomState randomState, long seed, int regionX, int regionZ,
                                               CityGenerationSettings settings) {
         Key key = new Key(generator, randomState, settings, seed, regionX, regionZ);
-        Optional<CityLayout> cached = CACHE.get(key);
-        if (cached != null) return cached;
+        try {
+            return CACHE.get(key, () -> plan(generator, level, randomState, seed, regionX, regionZ, settings));
+        } catch (ExecutionException exception) {
+            throw new IllegalStateException("Unable to plan city region " + regionX + "," + regionZ,
+                    exception.getCause());
+        }
+    }
+
+    private static Optional<CityLayout> plan(ChunkGenerator generator, LevelHeightAccessor level,
+                                              RandomState randomState, long seed, int regionX, int regionZ,
+                                              CityGenerationSettings settings) {
         int size = CityPlan.sizeFor(seed, regionX, regionZ, settings);
         int offset = CityPlan.offsetFor(size);
         int[][] height = new int[size][size];
@@ -52,10 +58,8 @@ public final class CitySite {
             height[x][z] = surface;
             water[x][z] = surface > floor;
         }
-        Optional<CityLayout> planned = CityLayout.plan(seed, regionX, regionZ,
+        return CityLayout.plan(seed, regionX, regionZ,
                 new CityLayout.Terrain(height, water), settings);
-        CACHE.put(key, planned);
-        return planned;
     }
 
     public static boolean isSuitable(ChunkGenerator generator, LevelHeightAccessor level,
